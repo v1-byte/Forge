@@ -1,0 +1,3 @@
+Powered by Forge - Trainer Engine based on Unsloth
+
+See this directory's upstream LICENSE and COPYING files. Licensing differs by component: Apache-2.0 applies to unsloth/, tests/, and scripts/; AGPLv3 applies to studio/ and unsloth_cli/.

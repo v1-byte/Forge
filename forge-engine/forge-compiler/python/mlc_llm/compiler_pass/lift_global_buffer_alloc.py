@@ -1,0 +1,200 @@
+"""A compiler pass that lifts TIR-level global allocation to Relax."""
+
+from typing import Dict, List, Tuple  # noqa: UP035
+
+import tvm_ffi
+import tvm_tirx
+from tvm import relax, s_tir
+from tvm.relax.analysis import remove_all_unused
+from tvm.relax.expr_functor import PyExprMutator, mutator
+from tvm_tirx import ir, tirx
+from tvm_tirx.ir.module import IRModule
+
+
+@tvm_tirx.transform.module_pass(opt_level=0, name="LiftTIRGlobalBufferAlloc")
+class LiftTIRGlobalBufferAlloc:
+    """A compiler pass that lifts TIR-level global allocation to Relax."""
+
+    def transform_module(
+        self,
+        mod: IRModule,
+        _ctx: tvm_tirx.transform.PassContext,
+    ) -> IRModule:
+        """IRModule-level transformation"""
+        return _TIRGlobalAllocRewriter(mod).transform()
+
+
+@mutator
+class _TIRGlobalAllocRewriter(PyExprMutator):
+    def __init__(self, mod: IRModule):
+        super().__init__(mod)
+        self.mod = mod
+        self.gv2new_tensor_sinfo: Dict[  # noqa: UP006
+            tvm_tirx.ir.GlobalVar,
+            Tuple[tvm_tirx.ir.GlobalVar, List[relax.TensorType], tirx.Function],  # noqa: UP006
+        ] = {}
+
+    def transform(self) -> IRModule:
+        """Entry point of the transformation"""
+        for g_var, func in self.mod.functions_items():
+            if isinstance(func, tirx.Function):
+                updated_func, tensor_sinfo_list = remove_global_buf_alloc(func)
+                if len(tensor_sinfo_list) > 0:
+                    new_gv = self.builder_.add_func(updated_func, g_var.name_hint)
+                    self.gv2new_tensor_sinfo[g_var] = (new_gv, tensor_sinfo_list, func)
+
+        self.mod = self.builder_.get()
+        for g_var, func in self.mod.functions_items():
+            if isinstance(func, relax.Function):
+                updated_func = self.visit_expr(func)
+                updated_func = remove_all_unused(updated_func)
+                self.builder_.update_func(g_var, updated_func)
+
+        mod = self.builder_.get()
+        return relax.transform.DeadCodeElimination()(mod)
+
+    def visit_call_(self, call: relax.Call):
+        call = self.visit_expr_post_order(call)
+        if (
+            call.op != tvm_tirx.ir.Op.get("relax.call_tir")
+            or call.args[0] not in self.gv2new_tensor_sinfo
+        ):
+            return call
+
+        g_var = call.args[0]
+        new_gv, tensor_sinfo, func_before_update = self.gv2new_tensor_sinfo[g_var]
+
+        assert len(call.ty_args) == 1
+        if any(_has_symbolic_var(sinfo) for sinfo in tensor_sinfo):
+            tensor_sinfo, success = _resolve_tir_var_mapping(func_before_update, call, tensor_sinfo)
+            if not success:
+                # Cannot resolve TIR var mapping. Fall back to no lifting.
+                self.gv2new_tensor_sinfo.pop(g_var)
+                return call
+
+        args = list(call.args)
+        args[0] = new_gv
+        if isinstance(call.ty_args[0], relax.TensorType):
+            new_call = relax.Call(
+                call.op,
+                args=args,
+                ty_args=[relax.TupleType(list(call.ty_args) + tensor_sinfo)],
+                attrs=call.attrs,
+            )
+            emitted_tuple = self.builder_.emit(new_call)
+            return relax.TupleGetItem(emitted_tuple, 0)
+        assert isinstance(call.ty_args[0], relax.TupleType)
+        return relax.Call(
+            call.op,
+            args=args,
+            ty_args=[relax.TupleType(list(call.ty_args[0].fields) + tensor_sinfo)],
+            attrs=call.attrs,
+        )
+
+
+def remove_global_buf_alloc(
+    func: tirx.Function,
+) -> Tuple[tirx.Function, List[relax.TensorType]]:  # noqa: UP006
+    """Remove the global buffer allocation for a given TIR PrimFunc."""
+    assert len(func.body) == 1 and isinstance(func.body[0], s_tir.SBlockRealize)
+    params = list(func.params)
+    tensor_sinfo = []
+    alloc_tensors = []
+
+    insertion_point = len(params)
+    while not tirx.is_tensor_var(params[insertion_point - 1]):
+        insertion_point -= 1
+        assert insertion_point >= 1
+
+    prev_root_block = func.body[0].block
+    for buf_alloc in prev_root_block.alloc_tensors:
+        if buf_alloc.scope() == "global":
+            params.insert(insertion_point, buf_alloc)
+            insertion_point += 1
+            tensor_sinfo.append(relax.TensorType(buf_alloc.shape, buf_alloc.dtype))
+        else:
+            alloc_tensors.append(buf_alloc)
+
+    if len(tensor_sinfo) == 0:
+        return func, []
+
+    assert len(prev_root_block.iter_vars) == 0
+    assert len(prev_root_block.reads) == 0
+    assert len(prev_root_block.writes) == 0
+    assert len(prev_root_block.match_tensors) == 0
+    assert prev_root_block.name_hint == "root"
+    assert prev_root_block.init is None
+    root_block = s_tir.SBlock(
+        iter_vars=[],
+        reads=[],
+        writes=[],
+        name_hint="root",
+        body=prev_root_block.body,
+        alloc_tensors=alloc_tensors,
+        annotations=prev_root_block.annotations,
+    )
+
+    updated_func = tirx.Function(
+        params=params,
+        body=s_tir.SBlockRealize(iter_values=[], predicate=True, block=root_block),
+        ret_type=func.ret_type,
+        attrs=func.attrs,
+    )
+    return updated_func, tensor_sinfo
+
+
+def _has_symbolic_var(tensor_sinfo: relax.TensorType) -> bool:
+    assert isinstance(tensor_sinfo.shape, relax.ShapeExpr)
+    for dim in tensor_sinfo.shape.values:
+        if not isinstance(dim, ir.IntImm):
+            return True
+    return False
+
+
+def _resolve_tir_var_mapping(
+    func: tirx.Function,
+    call: relax.Call,
+    tensor_sinfo: List[relax.TensorType],  # noqa: UP006
+) -> Tuple[List[relax.TensorType], bool]:  # noqa: UP006
+    """Resolve the TIR symbolic var relationship across sides of PrimFunc and Relax Function"""
+    var_map: Dict[tirx.Var, tirx.Expr] = {}  # noqa: UP006
+
+    n_arg = len(call.args[1].fields)
+    for i in range(n_arg):
+        buffer_shape = func.params[i].shape
+        arg_shape = call.args[1][i].ty.shape.values
+        assert len(buffer_shape) == len(arg_shape)
+        for v_l, v_r in zip(buffer_shape, arg_shape):
+            if isinstance(v_l, tirx.Var):
+                var_map[v_l] = v_r
+            elif not isinstance(v_l, ir.IntImm):
+                return [], False
+
+    ret_tensors = call.ty_args[0]
+    ret_tensors = (
+        [ret_tensors] if isinstance(ret_tensors, relax.TensorType) else list(ret_tensors.fields)
+    )
+    for i, ret_tensor in enumerate(ret_tensors):
+        buffer_shape = func.params[n_arg + i].shape
+        ret_tensor_shape = ret_tensor.shape.values
+        assert len(buffer_shape) == len(ret_tensor_shape)
+        for v_l, v_r in zip(buffer_shape, ret_tensor_shape):
+            if isinstance(v_l, tirx.Var):
+                var_map[v_l] = v_r
+            elif not isinstance(v_l, ir.IntImm):
+                return [], False
+
+    updated_tensor_sinfo = []
+    for sinfo in tensor_sinfo:
+        if not _has_symbolic_var(sinfo):
+            updated_tensor_sinfo.append(sinfo)
+            continue
+        new_shape = []
+        for dim in sinfo.shape.values:
+            new_shape.append(
+                tvm_ffi.structural_map(
+                    dim, (tirx.Var, lambda var: var_map.get(var, var)), order="post"
+                )
+            )
+        updated_tensor_sinfo.append(relax.TensorType(new_shape, sinfo.dtype))
+    return updated_tensor_sinfo, True
