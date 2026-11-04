@@ -1,7 +1,243 @@
-Forge engine inventory
+FORGE ENGINE SYSTEM INVENTORY
 
-forge-compiler — compiler dan runtime deployment model.
-forge-editor — server/common engine editor tanpa browser UI upstream.
-forge-inference — inference runtime C/C++ untuk model CPU/GPU, tokenisasi, GGUF, sampling, dan serving.
-forge-trainer — training dan fine-tuning engine berbasis Unsloth.
-forge-litgpt — engine Python untuk konfigurasi, training, fine-tuning, generation, evaluasi, konversi checkpoint, dan serving.
+Tujuan
+Forge adalah kumpulan engine AI tanpa UI bawaan upstream. Setiap engine berisi sistem runtime, compiler, inference, training, atau adapter server yang dapat dipanggil oleh lapisan Forge. File ini menjelaskan nama dan fungsi mesin yang tersedia.
+
+Arsitektur alur utama
+1. Model mentah atau checkpoint masuk melalui loader/converter.
+2. Compiler melakukan transformasi graph, quantization, penentuan target hardware, dan packaging bila diperlukan.
+3. Inference runtime memuat model hasil konversi, mengelola tokenizer, KV cache, sampling, grammar, batch, dan backend CPU/GPU.
+4. Trainer melakukan pretraining, supervised fine-tuning, LoRA/QLoRA, RL, diffusion training, atau optimasi parameter.
+5. Server/common layer mengekspos model melalui proses lokal, socket, atau endpoint API yang dapat dihubungkan ke lapisan Forge.
+6. Forge dapat memilih engine sesuai kebutuhan: compile/deploy, inference, training, LitGPT workflow, atau editor server.
+
+======================================================================
+1. forge-compiler
+======================================================================
+Nama: Forge Compiler Engine
+Fungsi utama: compiler dan runtime deployment untuk mengubah model LLM/VLM menjadi artifact yang dapat dijalankan pada target perangkat dan backend tertentu.
+
+Komponen inti:
+- cpp/: runtime C/C++ untuk FFI JSON, metadata model, tokenizer streaming, multi-GPU, engine serving, cache, sampling, logit processing, metrics, tracing, dan utilitas device/threading.
+- python/mlc_llm/: API Python untuk konfigurasi model, loader Hugging Face, compilation, conversion weights, quantization, packaging, serving, benchmarking, routing, dan konfigurasi device/target.
+- model/: implementasi arsitektur model dan preset model yang dikenali compiler.
+- nn/ dan op/: primitive neural-network, attention, KV cache, batch matrix multiplication, MoE, rotary/multi-dimensional position embedding, pipeline parallel, dan operasi backend khusus.
+- compiler_pass/: pass optimasi graph dan lowering, termasuk fusion dequantization/matmul, add-norm, transpose/matmul, CUDA graph allocation, sampler/logit attachment, KV-cache dispatch, Triton dispatch, memory estimation, dan pipeline parallel rewrite.
+- quantization/: strategi no-quant, per-tensor, group, block-scale, FP8, AWQ, FT, dan utilitas quantization model.
+- tokenizers/ dan conversation_template/: tokenizer runtime, streamer, format percakapan, system prompt, dan template untuk berbagai keluarga model.
+- serve/: engine synchronous/asynchronous, request state, model state, embedding engine, radix/prefix cache, event tracing, dan utilitas serving.
+- router/ dan protocol/: routing request, generation config, OpenAI-compatible protocol, conversation protocol, artifact manifest, microserving protocol, error/debug protocol, serta format konfigurasi chat.
+- cli/: command-line system untuk compile, chat, serve, convert weight, calibrate, generate config, package, delivery, worker, dan pemeriksaan device.
+- bench/: benchmark endpoint, dataset, request processor, request record, dan pengukuran performa serving.
+- scripts/: utilitas build/deployment dan pemeriksaan operasional yang tersisa dari source compiler.
+
+Kemampuan sistem:
+- Membaca konfigurasi model dan bobot dari sumber Hugging Face atau format internal.
+- Mengonversi serta mem-preshard bobot agar sesuai dengan target device atau tensor parallelism.
+- Menentukan target CPU/GPU/backend dan mengatur thread, device, memory, serta runtime flags.
+- Melakukan graph lowering dan optimasi operator sebelum menghasilkan module/artifact deployment.
+- Mendukung quantization yang tersedia di modul quantization, termasuk group/block/FP8/AWQ sesuai model dan backend.
+- Menjalankan generation/chat melalui tokenizer, template percakapan, sampler, logit processor, temperature, top-p/top-k, grammar, serta speculative decoding support.
+- Menjalankan server multi-request dengan request queue, batching, KV/prefix cache, metrics, trace, dan multi-GPU loader.
+- Menyediakan jalur API/FFI JSON dan protokol yang kompatibel dengan pola OpenAI untuk integrasi Forge.
+- Menyediakan packaging dan delivery artifact agar model hasil compile dapat dipindahkan ke target runtime.
+
+Input utama:
+- Model configuration, tokenizer, checkpoint/bobot, quantization config, target device, target backend, generation config, serta request chat/completion/embedding.
+
+Output utama:
+- Compiled model artifact, packaged deployment output, converted/quantized weight, konfigurasi runtime, response generation, dan metrics serving.
+
+Batasan integrasi saat ini:
+- Tidak ada UI chat, web frontend, Android/iOS demo, docs, examples, atau test upstream di folder engine.
+- Keberhasilan build bergantung pada dependency compiler/runtime dan toolchain target seperti CMake, backend GPU/CPU, serta komponen TVM/FFI yang dipasang di lingkungan build.
+
+======================================================================
+2. forge-editor
+======================================================================
+Nama: Forge Editor Server Engine
+Fungsi utama: server/common backend untuk menghubungkan Forge dengan proses editor dan layanan jaringan, tanpa browser UI bawaan upstream.
+
+Komponen inti:
+- src/common/: event emitter, HTTP helper, dan utilitas lintas runtime.
+- src/node/app.ts dan main.ts: bootstrap aplikasi server Node.js, lifecycle, konfigurasi, dan startup.
+- src/node/cli.ts: parsing command-line dan pengaturan mode eksekusi server.
+- src/node/http.ts, socket.ts, wsRouter.ts, vscodeSocket.ts: HTTP server, WebSocket routing, socket editor, dan bridge koneksi editor.
+- src/node/proxy.ts dan routes/domainProxy.ts/pathProxy.ts: reverse proxy dan penerusan request/path ke service atau workspace.
+- src/node/routes/: route health check, login/logout, error handling, update, dan koneksi ke proses editor.
+- src/node/settings.ts, constants.ts, util.ts, wrapper.ts, heart.ts, update.ts: konfigurasi runtime, wrapper process, heartbeat, lifecycle, utility, dan update mechanism.
+- typings/httpolyglot/: type declaration untuk dependency transport Node.
+
+Kemampuan sistem:
+- Menjalankan proses server Node sebagai lapisan konektivitas editor Forge.
+- Mengatur HTTP request, WebSocket, socket editor, proxy domain/path, health check, dan route lifecycle.
+- Menyediakan login/logout dan state server yang diperlukan oleh deployment editor.
+- Mengelola wrapper process, heartbeat, graceful startup/shutdown, dan komunikasi ke proses VS Code/editor.
+- Menjadi adapter transport antara Forge dan engine editor tanpa membawa browser UI upstream.
+
+Input utama:
+- Argumen CLI, environment variable, konfigurasi server, request HTTP, koneksi WebSocket, dan path/domain proxy.
+
+Output utama:
+- Server process, health response, proxied editor session, WebSocket stream, dan status/lifecycle event.
+
+Batasan integrasi saat ini:
+- Folder src/browser dan tampilan browser upstream sudah dihapus.
+- Engine ini bukan editor visual mandiri; Forge perlu menyediakan UI atau client sendiri bila ingin menampilkan editor.
+- Build/runtime membutuhkan Node.js dan dependency package yang sesuai.
+
+======================================================================
+3. forge-inference
+======================================================================
+Nama: Forge Inference Engine
+Fungsi utama: runtime inference C/C++ untuk memuat dan menjalankan model lokal pada CPU/GPU, termasuk tokenization, sampling, cache, grammar, conversion, dan serving.
+
+Komponen inti:
+- src/: core llama runtime, model loader/saver, model metadata, vocabulary, context, batch, graph execution, KV cache, memory, sampler, quantization, chat, grammar, mmap, dan model implementations.
+- src/models/: implementasi banyak keluarga arsitektur model dan varian multimodal/MoE yang didukung runtime.
+- ggml/: tensor engine dan backend abstraction untuk CPU serta backend akselerator yang tersedia seperti CUDA, Metal, Vulkan, OpenCL, SYCL, HIP/ROCm, OpenVINO, WebGPU, CANN, Hexagon, RPC, dan backend lain yang diaktifkan saat build.
+- common/: shared runtime utility untuk argument parsing, chat template/parser, JSON/schema grammar, Jinja template, console, logging, download/cache Hugging Face, file locking, sampling, speculative decoding, n-gram cache, reasoning budget, trie, Unicode, dan preset model.
+- grammars/: grammar resource dan constraint support untuk controlled generation.
+- app/: aplikasi runtime dasar, loader/download model, dan executable inference.
+- tools/server/: server inference dan endpoint serving.
+- tools/cli/: command-line utilities runtime.
+- tools/tokenize/: tokenization dan pemeriksaan vocabulary.
+- tools/quantize/: quantization model.
+- tools/gguf-split/: pemisahan dan penggabungan shard GGUF.
+- tools/export-lora/: export/adaptation LoRA.
+- tools/imatrix/: importance matrix dan calibration support.
+- tools/perplexity/: evaluasi perplexity.
+- tools/llama-bench/ dan tools/batched-bench/: benchmark latency/throughput.
+- tools/rpc/ dan tools/connect/: remote/runtime connection.
+- tools/mtmd/ dan tools/tts/: multimodal/token processing serta jalur text-to-speech yang tersedia di source runtime.
+- conversion/ dan script conversion Python: konversi checkpoint/weight dari banyak format model menuju format runtime.
+- gguf-py/gguf/: parser, writer, metadata, tensor mapping, dan tooling format GGUF.
+- models/templates/: template konfigurasi model.
+- vendor/: dependency C/C++ yang dipakai runtime, termasuk HTTP, hash, audio, JSON, memory/audio helper, dan utility header.
+
+Kemampuan sistem:
+- Memuat model secara memory-mapped atau melalui loader runtime dan membaca metadata/tokenizer.
+- Menjalankan prompt completion, chat completion, embedding, batch inference, dan streaming token.
+- Mengatur context length, batch size, microbatch, KV cache, recurrent/hybrid memory, dan offload ke GPU/backend.
+- Mendukung sampling temperature, top-k/top-p, grammar-constrained decoding, JSON/schema grammar, penalties, logit bias, dan reasoning budget.
+- Mendukung speculative decoding, draft token, n-gram cache, prefix reuse, serta optimasi untuk multi-request.
+- Menjalankan quantized inference dan conversion ke/dari GGUF dengan model-specific mapping.
+- Menyediakan server, CLI, benchmark, tokenizer utility, model quantizer, perplexity tool, split GGUF, LoRA export, RPC, dan koneksi runtime.
+- Menggunakan backend ggml modular agar satu API runtime dapat ditargetkan ke CPU, CUDA, Metal, Vulkan, OpenCL, SYCL, HIP, OpenVINO, WebGPU, dan backend lain yang diaktifkan.
+- Mendukung format chat/template berbeda melalui parser dan template engine Jinja/PEG yang ada.
+
+Input utama:
+- Model GGUF atau checkpoint yang dikonversi, tokenizer/vocabulary, prompt/chat messages, sampling config, grammar/schema, device/backend config, dan request server.
+
+Output utama:
+- Token stream, text completion, embedding, model metadata, quantized GGUF, benchmark result, perplexity, serta server response.
+
+Batasan integrasi saat ini:
+- UI web di tools/ui, examples, tests, docs, dan demo mobile tidak dibawa.
+- Backend hardware tertentu hanya aktif jika dependency SDK, compiler flag, driver, dan konfigurasi build tersedia.
+- Dukungan model/format mengikuti implementasi conversion dan model yang ada pada snapshot engine.
+
+======================================================================
+4. forge-trainer
+======================================================================
+Nama: Forge Trainer Engine
+Fungsi utama: engine training dan fine-tuning berbasis Unsloth untuk model bahasa, multimodal, reinforcement learning, quantized training, dan optimasi kernel.
+
+Komponen inti:
+- unsloth/__init__.py dan runtime initialization: bootstrap, device detection, import fixes, metadata, auto-install hooks, CPU/GPU initialization, dan environment handling.
+- unsloth/models/: loader, mapping, model shim, architecture integration, checkpoint handling, attention compatibility, generation, vision, diffusion, language model, sentence-transformer, MoE, recurrent, dan distributed model support.
+- unsloth/kernels/: optimized kernel untuk fast LoRA, cross entropy, flex attention, FP8/NF4/INT4, RMS/layer norm, RoPE, SwiGLU/GEGLU, fused operation, multi-LoRA, MoE, Triton launch, dan utility kernel.
+- unsloth/optimizers/: Flash AdamW, Q-GaLore, projector, state offload, serta optimizer yang mengurangi kebutuhan memory.
+- unsloth/precision/: pemilihan hardware, precision recipe, dtype selector, dan strategi precision/quantization.
+- unsloth/dataprep/: preprocessing ebook/raw text, synthetic data, konfigurasi dataset, dan data preparation.
+- unsloth/registry/: registry model dan mapping keluarga Llama, Gemma, Mistral, Phi, Qwen, DeepSeek, dan model terkait.
+- unsloth/trainer.py, save.py, tokenizer_utils.py, chat_templates.py: training loop integration, save/load checkpoint, tokenizer, chat template, dan adapter handling.
+- unsloth/context_parallel.py, fsdp2_*.py, tp_*.py, pp_*.py, parallel_*.py: context parallelism, FSDP2, tensor parallelism, pipeline parallelism, distributed environment, dan multi-device execution.
+- unsloth/models/rl*.py, dpo.py, decision*.py: reinforcement learning, preference optimization, DPO, GRPO/RL-related compatibility, dan decision model workflow.
+- unsloth/models/diffusion*.py: diffusion model training/inference, objective, sampler, masking, profile, dan diffusion trainer.
+- scripts/: utility preprocessing, checkpoint preparation/conversion, performance probe, quantization probe, compile probe, benchmark, data/training helper, dan operational verification.
+
+Kemampuan sistem:
+- Mempercepat training/fine-tuning model dengan kernel fused dan memory-efficient path.
+- Menjalankan full fine-tuning, LoRA, QLoRA, adapter training, serta penyimpanan/konversi checkpoint.
+- Mendukung quantization-aware path dan precision seperti FP8, NF4, INT4, serta optimasi memory sesuai backend.
+- Menangani model bahasa, vision/multimodal, sentence-transformer, MoE, recurrent, dan diffusion sesuai modul yang tersedia.
+- Menjalankan supervised training, preference optimization, DPO, RL/GRPO-related flow, serta integrasi trainer ecosystem.
+- Menyediakan distributed training melalui FSDP2, tensor parallel, pipeline parallel, context parallel, dan environment-aware device mapping.
+- Menyediakan dataset preparation, chat template mapping, tokenizer utilities, raw text/ebook processing, dan synthetic data preparation.
+- Menyediakan checkpoint prequantization, safetensors conversion, profiling, KV-cache/performance probe, dan hardware capability probe.
+
+Input utama:
+- Pretrained checkpoint, dataset/text/image input, tokenizer, training configuration, adapter/quantization settings, optimizer/precision settings, dan distributed hardware configuration.
+
+Output utama:
+- Fine-tuned checkpoint, LoRA/adapter weights, merged or quantized model, training metrics, prepared dataset, dan profiling/benchmark result.
+
+Batasan integrasi saat ini:
+- Studio, CLI yang bergantung pada Studio, frontend, Docker helper, examples, tests, dan UI upstream dihapus.
+- Package unsloth dipertahankan sebagai engine library; orchestrator Forge perlu menyediakan entrypoint training sendiri.
+- Fitur training memerlukan dependency Python/GPU yang sesuai seperti PyTorch, Transformers, PEFT/TRL ecosystem, Triton, dan library backend yang relevan.
+
+======================================================================
+5. forge-litgpt
+======================================================================
+Nama: Forge LitGPT Engine
+Fungsi utama: engine Python modular untuk konfigurasi model, pretraining, fine-tuning, generation, evaluasi, checkpoint conversion, tokenisasi, dan serving.
+
+Komponen inti:
+- config.py, parser_config.py, args.py, constants.py: schema konfigurasi model, parser argument, default, preset, dan constant runtime.
+- model.py: implementasi model dan blok transformer yang dipakai saat training/inference.
+- tokenizer.py: tokenizer loading, encoding/decoding, special token, dan integrasi checkpoint/tokenizer.
+- prompts.py dan chat/base.py: prompt formatting, chat state, conversation handling, dan streaming/chat abstraction.
+- data/: dataset abstraction dan preparation untuk JSON/text, Alpaca, FLAN, LIMA, DEITA, OpenWebText, TinyStories, TinyLlama, Longform, MicroLlama, StarCoder, SlimPajama, serta sumber data terkait.
+- pretrain.py: pretraining loop, dataset iteration, optimizer/scheduler integration, checkpointing, dan distributed training hooks.
+- finetune/full.py: full-parameter fine-tuning.
+- finetune/lora.py dan lora_legacy.py: LoRA/adapter fine-tuning.
+- finetune/adapter.py dan adapter_v2.py: adapter training dan varian adapter API.
+- generate/base.py: generation runtime, sampler, prompt processing, stop condition, dan token output.
+- generate/full.py, adapter.py, adapter_v2.py: generation dari full checkpoint atau adapter checkpoint.
+- generate/sequentially.py: sequential generation workflow.
+- generate/speculative_decoding.py: speculative decoding dengan draft/verification path.
+- generate/tp.py: generation dengan tensor parallelism.
+- eval/evaluate.py: evaluasi model/dataset dan pengukuran hasil.
+- deploy/serve.py: serving model sebagai proses/endpoint runtime.
+- scripts/download.py: download model/checkpoint/tokenizer.
+- scripts/convert_hf_checkpoint.py: konversi checkpoint Hugging Face ke format LitGPT.
+- scripts/convert_lit_checkpoint.py dan convert_pretrained_checkpoint.py: konversi dan normalisasi checkpoint.
+- scripts/merge_lora.py: merge adapter LoRA ke checkpoint model.
+- scripts/validate.py: validasi konfigurasi/checkpoint/model.
+- api.py dan utils.py: API publik, checkpoint utility, filesystem, device, logging, precision, distributed helper, dan common runtime support.
+
+Kemampuan sistem:
+- Mengonfigurasi model dan training dari schema Python/CLI.
+- Menjalankan pretraining dan full fine-tuning.
+- Menjalankan LoRA, adapter, dan adapter v2 training.
+- Menjalankan text generation, chat, streaming, sequential generation, speculative decoding, serta tensor-parallel generation.
+- Menyediakan dataset preparation untuk dataset populer dan data JSON/text custom.
+- Mengunduh model/tokenizer, mengonversi checkpoint Hugging Face, memvalidasi checkpoint, dan merge LoRA.
+- Menjalankan evaluasi dan deployment serving.
+- Menggunakan PyTorch, safetensors, tokenizers, Hugging Face Hub, dan dependency tambahan yang didefinisikan di pyproject.toml.
+
+Input utama:
+- Model config, pretrained checkpoint, tokenizer, dataset, prompt/chat messages, fine-tuning config, adapter config, generation config, dan device/distributed settings.
+
+Output utama:
+- Model checkpoint, adapter/LoRA weights, merged checkpoint, generated text/token stream, evaluation result, dan serving response.
+
+Batasan integrasi saat ini:
+- UI, tutorial, docs, examples, tests, dan Markdown upstream tidak dibawa.
+- Fitur optional seperti dataset evaluation, quantization, logging, serving, dan conversion membutuhkan dependency optional yang sesuai.
+- Engine library tersedia di forge-engine/forge-litgpt; Forge perlu membuat entrypoint/orchestrator sendiri untuk menyatukan LitGPT dengan inference runtime lain.
+
+======================================================================
+Hubungan antar-engine di Forge
+======================================================================
+- LitGPT dan Trainer berfokus pada training/fine-tuning dan menghasilkan checkpoint atau adapter.
+- Inference menerima model hasil training/conversion untuk generation, embedding, chat, dan serving lokal.
+- Compiler mengubah model/checkpoint ke artifact deployment yang lebih spesifik terhadap target device/backend.
+- Editor Server menyediakan transport/server layer untuk menghubungkan Forge dengan proses editor; ia tidak menjalankan training atau inference model.
+- Forge dapat memilih jalur LitGPT -> conversion -> inference, Trainer -> quantization/export -> inference, atau model langsung -> compiler -> deployment runtime.
+
+Yang sengaja tidak termasuk
+- Browser UI, chat UI, dashboard, Studio, frontend, Android/iOS demo, examples, tests, dan dokumentasi upstream.
+- Entry point UI otomatis; lapisan Forge harus menyediakan command/orchestrator sendiri.
