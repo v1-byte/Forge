@@ -1,3 +1,7 @@
-
 Forge engine inventory
-- forge-litgpt: model configuration, tokenization, training/fine-tuning, generation, evaluation, checkpoint conversion, and serving through LitGPT's Python engine.
+
+forge-compiler — compiler dan runtime deployment model.
+forge-editor — server/common engine editor tanpa browser UI upstream.
+forge-inference — inference runtime C/C++ untuk model CPU/GPU, tokenisasi, GGUF, sampling, dan serving.
+forge-trainer — training dan fine-tuning engine berbasis Unsloth.
+forge-litgpt — engine Python untuk konfigurasi, training, fine-tuning, generation, evaluasi, konversi checkpoint, dan serving.
