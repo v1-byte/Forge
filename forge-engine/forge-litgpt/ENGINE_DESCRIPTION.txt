@@ -1,0 +1,4 @@
+Name: LitGPT
+Function: Python-based large-language-model engine for model configuration, tokenization, pretraining, fine-tuning, LoRA/adapters, generation, evaluation, checkpoint conversion, and serving.
+Integration: Vendored as Forge's LitGPT engine; the payload contains the runtime and training system only, without upstream UI, tutorials, tests, or Markdown documentation.
+Upstream: Lightning-AI/litgpt
