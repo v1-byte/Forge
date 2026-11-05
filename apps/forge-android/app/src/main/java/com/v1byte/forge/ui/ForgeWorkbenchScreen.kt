@@ -129,6 +129,7 @@ public fun ForgeWorkbenchScreen(
         val compact = maxWidth < 768.dp
         val wide = maxWidth >= 1100.dp
         val showDesktopExplorer = maxWidth >= 768.dp
+        val assistantOverlayWidth = if (compact) maxWidth - 28.dp else 380.dp
         Column(Modifier.fillMaxSize()) {
             ForgeTopBar(
                 state = state,
@@ -260,7 +261,7 @@ public fun ForgeWorkbenchScreen(
                             }
                         },
                         modifier = Modifier.align(Alignment.CenterEnd).padding(vertical = 10.dp)
-                            .width(if (compact) (maxWidth - 28.dp) else 380.dp).fillMaxHeight(0.96f).zIndex(5f),
+                            .width(assistantOverlayWidth).fillMaxHeight(0.96f).zIndex(5f),
                     )
                 }
             }
