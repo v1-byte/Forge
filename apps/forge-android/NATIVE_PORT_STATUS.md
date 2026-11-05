@@ -4,13 +4,14 @@ This document tracks the port of the uploaded `forge-workbench-fi-ai-eng.zip` in
 
 ## Ported into the native launcher in this change
 
-- The primary navigation is now **Kode Biasa**, **AI Engineering**, and **Archive / Bongkar**.
-- AI Engineering has native Compose sections: AI Code, Models, System, Tokens, Engines, Machine, and Training.
-- AI Code reuses the native editor and existing Android callbacks rather than copying web/JavaScript code.
-- Models screen exposes the existing Android document picker, GGUF metadata inspection, and llama.cpp model-load path. These are source-connected operations; end-to-end model loading/generation still needs testing on a physical arm64 Android device with a compatible GGUF model.
-- Archive uses the Android Storage Access Framework and Java ZIP central-directory reader to list archive entries. It stages at most 512 MiB in app cache and shows at most 2,000 entries. It does not extract, modify, or repackage archives.
-- System/Machine display Android build/device identity supplied by the native app. Tokens, unsupported engines, and training explicitly state their current limitations.
-- The UI does not report fake success for compiler, training, quantization, serving, or tokenizer actions.
+- The primary navigation is **Kode Biasa**, **AI Engineering**, and **Archive / Bongkar**.
+- The native screen now follows the uploaded Workbench hierarchy more closely: a vertical activity rail remains on the left, the phone Explorer opens as a drawer, the editor has its file bar and Inline Copilot row, and the bottom panel is inside the editor pane. Wide screens show the Explorer and assistant side-by-side.
+- Empty startup state, Explorer/assistant floating controls, and the compact header follow the mobile arrangement in the supplied UI. The `PREVIEW UI` note remains visible so placeholder actions are not confused with working engines.
+- AI Engineering categories are exposed in the sidebar. AI Code reuses the native editor and existing Android callbacks rather than copying web/JavaScript code.
+- The user-provided Forge and Copilot logo assets are used by the native Compose UI.
+- Models exposes the Android document picker, GGUF metadata inspection, and llama.cpp model-load path. End-to-end model loading/generation still needs testing on an arm64 Android device with a compatible GGUF model.
+- Archive uses the Android Storage Access Framework and Java ZIP central-directory reader to list entries. It stages at most 512 MiB in app cache and shows at most 2,000 entries; it does not extract, modify, or repackage archives.
+- System/Machine display Android build/device identity. Unsupported compiler, training, quantization, serving, and tokenizer actions are not reported as successful operations.
 
 ## Not yet implemented as native features
 
@@ -23,4 +24,4 @@ This document tracks the port of the uploaded `forge-workbench-fi-ai-eng.zip` in
 
 ## Validation boundary
 
-CI can prove Kotlin/Gradle/CMake compilation, tests that are present, APK assembly, and APK integrity. It cannot prove the UI matches every web detail or that inference works on a device. Before calling the port complete, test navigation and accessibility on phone/tablet sizes, open/save through SAF, inspect/load a supported GGUF, generate a prompt on arm64 hardware, and test ZIP listing with valid, malformed, oversized, and many-entry archives. Keep unavailable operations disabled or clearly labelled until their native implementations and tests exist.
+CI can prove Kotlin/Gradle/CMake compilation, tests that are present, APK assembly, and APK integrity. Browser screenshots in `screenshots/` are references for the web preview only; they are not screenshots from the native APK. The current sandbox does not have a working Android emulator/device for a native UI capture. Before calling the port complete, validate screenshots/navigation and accessibility on phone/tablet sizes, open/save through SAF, inspect/load a supported GGUF, generate a prompt on arm64 hardware, and test ZIP listing with valid, malformed, oversized, and many-entry archives. Keep unavailable operations clearly labelled until their native implementations and tests exist.

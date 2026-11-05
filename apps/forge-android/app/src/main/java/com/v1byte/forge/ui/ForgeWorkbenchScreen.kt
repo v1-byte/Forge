@@ -27,6 +27,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.zIndex
 import com.v1byte.forge.R
 
 public enum class ForgeWorkspace(val title: String) {
@@ -78,8 +81,8 @@ public data class ForgeUiState(
     val workspace: ForgeWorkspace = ForgeWorkspace.CODE,
     val activity: ForgeActivity = ForgeActivity.EXPLORER,
     val aiSection: ForgeAiSection = ForgeAiSection.AI_CODE,
-    val fileName: String = "README.md",
-    val fileContent: String = "# Forge Workbench\n\nSelect a file or model to get started.\n",
+    val fileName: String = "",
+    val fileContent: String = "",
     val modelName: String = "No model selected",
     val modelLoaded: Boolean = false,
     val loading: Boolean = false,
@@ -102,6 +105,9 @@ public fun ForgeWorkbenchScreen(
     onActivitySelected: (ForgeActivity) -> Unit,
     onPickCodeFile: () -> Unit,
     onPickModelFile: () -> Unit,
+    onNewFile: () -> Unit,
+    onCloseFile: () -> Unit,
+    onOpenFolder: () -> Unit,
     onSendPrompt: (String) -> Unit,
     onChatSend: (String) -> Unit,
     onRunAction: (ForgeAction) -> Unit,
@@ -113,63 +119,64 @@ public fun ForgeWorkbenchScreen(
 ) {
     var editorText by remember(state.fileName, state.fileContent) { mutableStateOf(state.fileContent) }
     var chatDraft by remember { mutableStateOf("") }
-    var bottomTab by remember { mutableStateOf("Problems") }
+    var bottomTab by remember { mutableStateOf("Terminal") }
     var showCompactAssistant by remember { mutableStateOf(false) }
+    var showExplorerDrawer by remember { mutableStateOf(false) }
 
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize().background(ForgeBackground),
     ) {
+        val compact = maxWidth < 768.dp
         val wide = maxWidth >= 1100.dp
-        val medium = maxWidth >= 720.dp
-        val showExplorer = maxWidth >= 900.dp
+        val showDesktopExplorer = maxWidth >= 768.dp
         Column(Modifier.fillMaxSize()) {
             ForgeTopBar(
                 state = state,
+                compact = compact,
+                showAssistantMenuItem = !wide,
                 onWorkspaceSelected = onWorkspaceSelected,
+                onActivitySelected = onActivitySelected,
+                onPickCodeFile = onPickCodeFile,
+                onOpenArchive = onOpenArchive,
+                onNewFile = onNewFile,
                 onRunAction = onRunAction,
                 onCheckUpdates = onCheckUpdates,
                 onInstallUpdate = onInstallUpdate,
                 onEnableNotifications = onEnableNotifications,
-                showAssistantToggle = !wide,
                 onToggleAssistant = { showCompactAssistant = !showCompactAssistant },
             )
+            ForgePreviewNote()
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                when (state.workspace) {
-                    ForgeWorkspace.CODE -> if (medium) {
-                        Row(Modifier.fillMaxSize()) {
-                            ForgeActivityRail(state.activity, onActivitySelected, vertical = true)
-                            if (showExplorer) {
-                                ForgeExplorer(state, onPickCodeFile, onPickModelFile, Modifier.width(212.dp).fillMaxHeight())
+                Row(Modifier.fillMaxSize()) {
+                    ForgeActivityRail(
+                        activity = state.activity,
+                        onActivitySelected = { activity ->
+                            onActivitySelected(activity)
+                            if (!showDesktopExplorer) {
+                                showExplorerDrawer = !(showExplorerDrawer && state.activity == activity)
                             }
-                            ForgeEditorArea(
-                                state = state,
-                                editorText = editorText,
-                                onEditorTextChanged = { editorText = it },
-                                onSave = { onSaveEditor(editorText) },
-                                onPickCodeFile = onPickCodeFile,
-                                onSendPrompt = onSendPrompt,
-                                onRunAction = onRunAction,
-                                modifier = Modifier.weight(1f).fillMaxHeight(),
-                            )
-                            if (wide) {
-                                ForgeAssistantPanel(
-                                    state = state,
-                                    chatDraft = chatDraft,
-                                    onDraftChanged = { chatDraft = it },
-                                    onSend = {
-                                        val prompt = chatDraft.trim()
-                                        if (prompt.isNotEmpty()) {
-                                            onChatSend(prompt)
-                                            chatDraft = ""
-                                        }
-                                    },
-                                    modifier = Modifier.width(300.dp).fillMaxHeight(),
-                                )
-                            }
-                        }
+                        },
+                        vertical = true,
+                    )
+                    if (showDesktopExplorer && state.workspace != ForgeWorkspace.ARCHIVE) {
+                        ForgeWorkspaceSidebar(
+                            state = state,
+                            onPickCodeFile = onPickCodeFile,
+                            onPickModelFile = onPickModelFile,
+                            onNewFile = onNewFile,
+                            onAiSectionSelected = onAiSectionSelected,
+                            onRunAction = onRunAction,
+                            modifier = Modifier.width(260.dp).fillMaxHeight(),
+                        )
+                    }
+                    if (state.workspace == ForgeWorkspace.ARCHIVE) {
+                        ForgeArchiveWorkspace(
+                            state = state,
+                            onOpenArchive = onOpenArchive,
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                        )
                     } else {
-                        Column(Modifier.fillMaxSize()) {
-                            ForgeActivityRail(state.activity, onActivitySelected, vertical = false)
+                        Column(Modifier.weight(1f).fillMaxHeight()) {
                             ForgeEditorArea(
                                 state = state,
                                 editorText = editorText,
@@ -178,38 +185,69 @@ public fun ForgeWorkbenchScreen(
                                 onPickCodeFile = onPickCodeFile,
                                 onSendPrompt = onSendPrompt,
                                 onRunAction = onRunAction,
+                                onOpenArchive = onOpenArchive,
+                                onStartNewFile = onNewFile,
+                                onOpenExplorer = { showExplorerDrawer = true },
+                                onCloseFile = onCloseFile,
+                                onOpenFolder = onOpenFolder,
                                 modifier = Modifier.weight(1f).fillMaxWidth(),
+                            )
+                            ForgeBottomPanel(state, bottomTab, onTabSelected = { bottomTab = it })
+                        }
+                        if (wide) {
+                            ForgeAssistantPanel(
+                                state = state,
+                                chatDraft = chatDraft,
+                                onDraftChanged = { chatDraft = it },
+                                onSend = {
+                                    val prompt = chatDraft.trim()
+                                    if (prompt.isNotEmpty()) {
+                                        onChatSend(prompt)
+                                        chatDraft = ""
+                                    }
+                                },
+                                modifier = Modifier.width(300.dp).fillMaxHeight(),
                             )
                         }
                     }
-                    ForgeWorkspace.AI_ENGINEERING -> ForgeAiEngineeringWorkspace(
-                        state = state,
-                        editorText = editorText,
-                        onEditorTextChanged = { editorText = it },
-                        onAiSectionSelected = onAiSectionSelected,
-                        onPickCodeFile = onPickCodeFile,
-                        onPickModelFile = onPickModelFile,
-                        onSaveEditor = { onSaveEditor(editorText) },
-                        onSendPrompt = onSendPrompt,
-                        onRunAction = onRunAction,
-                        modifier = Modifier.fillMaxSize(),
+                }
+                if (showExplorerDrawer && !showDesktopExplorer && state.workspace != ForgeWorkspace.ARCHIVE) {
+                    Box(
+                        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.55f))
+                            .clickable { showExplorerDrawer = false }.zIndex(2f),
                     )
-                    ForgeWorkspace.ARCHIVE -> ForgeArchiveWorkspace(
+                    ForgeWorkspaceSidebar(
                         state = state,
-                        onOpenArchive = onOpenArchive,
-                        modifier = Modifier.fillMaxSize(),
+                        onPickCodeFile = { showExplorerDrawer = false; onPickCodeFile() },
+                        onPickModelFile = { showExplorerDrawer = false; onPickModelFile() },
+                        onNewFile = { showExplorerDrawer = false; onNewFile() },
+                        onAiSectionSelected = onAiSectionSelected,
+                        onRunAction = onRunAction,
+                        onCloseDrawer = { showExplorerDrawer = false },
+                        modifier = Modifier.align(Alignment.CenterStart).padding(start = 50.dp)
+                            .width(280.dp).fillMaxHeight().zIndex(3f),
                     )
                 }
-            }
-            ForgeBottomPanel(state, bottomTab, onTabSelected = { bottomTab = it })
-            ForgeStatusBar(state)
-        }
-        if (!wide && showCompactAssistant) {
-            Dialog(onDismissRequest = { showCompactAssistant = false }) {
-                Box(
-                    Modifier.fillMaxWidth().height(440.dp)
-                        .background(ForgeSurface, RoundedCornerShape(10.dp)),
-                ) {
+                if (!showDesktopExplorer && state.workspace != ForgeWorkspace.ARCHIVE) {
+                    ForgeFloatingButton(
+                        label = "Buka Explorer",
+                        onClick = { showExplorerDrawer = true },
+                        modifier = Modifier.align(Alignment.BottomStart).padding(start = 8.dp, bottom = 10.dp),
+                    )
+                }
+                if (!wide && state.workspace != ForgeWorkspace.ARCHIVE) {
+                    ForgeFloatingButton(
+                        copilot = true,
+                        label = "AI Chat",
+                        onClick = { showCompactAssistant = true },
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 10.dp),
+                    )
+                }
+                if (!wide && showCompactAssistant && state.workspace != ForgeWorkspace.ARCHIVE) {
+                    Box(
+                        Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.60f))
+                            .clickable { showCompactAssistant = false }.zIndex(4f),
+                    )
                     ForgeAssistantPanel(
                         state = state,
                         chatDraft = chatDraft,
@@ -221,10 +259,12 @@ public fun ForgeWorkbenchScreen(
                                 chatDraft = ""
                             }
                         },
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier.align(Alignment.CenterEnd).padding(vertical = 10.dp)
+                            .width(if (compact) (maxWidth - 28.dp) else 380.dp).fillMaxHeight(0.96f).zIndex(5f),
                     )
                 }
             }
+            ForgeStatusBar(state)
         }
     }
 }
@@ -232,79 +272,122 @@ public fun ForgeWorkbenchScreen(
 @Composable
 private fun ForgeTopBar(
     state: ForgeUiState,
+    compact: Boolean,
+    showAssistantMenuItem: Boolean,
     onWorkspaceSelected: (ForgeWorkspace) -> Unit,
+    onActivitySelected: (ForgeActivity) -> Unit,
+    onPickCodeFile: () -> Unit,
+    onOpenArchive: () -> Unit,
+    onNewFile: () -> Unit,
     onRunAction: (ForgeAction) -> Unit,
     onCheckUpdates: () -> Unit,
     onInstallUpdate: () -> Unit,
     onEnableNotifications: () -> Unit,
-    showAssistantToggle: Boolean,
     onToggleAssistant: () -> Unit,
 ) {
+    var showMenu by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().background(ForgeBackground)) {
         Row(
-            Modifier.fillMaxWidth().height(54.dp).padding(horizontal = 12.dp),
+            Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            Box(
-                Modifier.size(30.dp).background(
-                    Brush.linearGradient(listOf(ForgeOrange, ForgePink)), RoundedCornerShape(8.dp)
-                ), contentAlignment = Alignment.Center,
-            ) { Text("F", color = ForgeText, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp) }
-            Column(Modifier.weight(1f)) {
-                Text("Forge", color = ForgeText, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                Text("AI STUDIO", color = ForgeMutedSecondary, fontSize = 9.sp, letterSpacing = 1.4.sp)
-            }
-            if (state.modelLoaded) {
-                Text("●", color = ForgeGreen, fontSize = 9.sp)
-                Text(state.modelName, color = ForgeMuted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            ForgeTextButton("Updates", onClick = onCheckUpdates, compact = true)
-            ForgeTextButton("Notify", onClick = onEnableNotifications, compact = true)
-            if (showAssistantToggle) ForgeTextButton("AI Chat", onClick = onToggleAssistant, compact = true)
-            ForgeAccentButton("▶ Run", onClick = { onRunAction(ForgeAction.RUN) })
-        }
-        Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            ForgeWorkspace.values().forEach { workspace ->
-                ForgeChip(workspace.title, selected = workspace == state.workspace) { onWorkspaceSelected(workspace) }
-            }
-        }
-        Row(
-            Modifier.fillMaxWidth().background(ForgePanel).padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                "PREVIEW UI",
-                color = ForgeOrange,
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.border(0.5.dp, ForgeOrange.copy(alpha = 0.45f), RoundedCornerShape(5.dp))
-                    .padding(horizontal = 6.dp, vertical = 4.dp),
+            if (compact) ForgeTextButton("‹", onClick = { onActivitySelected(ForgeActivity.EXPLORER) }, compact = true)
+            Image(
+                painter = painterResource(R.drawable.forge_logo),
+                contentDescription = "Forge",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.height(if (compact) 17.dp else 20.dp).aspectRatio(400f / 218f),
             )
-            Text(
-                "Catatan: sebagian kontrol masih berupa tampilan; belum semua engine native terhubung.",
-                color = ForgeMuted,
-                fontSize = 9.sp,
-                lineHeight = 12.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
-            )
-        }
-        if (state.updateReady) {
-            Row(
-                Modifier.fillMaxWidth().background(ForgePanel).padding(horizontal = 12.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(if (state.updateMessage.isBlank()) "Update available" else state.updateMessage, color = ForgeMuted, fontSize = 11.sp, modifier = Modifier.weight(1f))
-                ForgeTextButton("Install", onClick = onInstallUpdate, compact = true)
+            if (compact) {
+                Text(
+                    state.activity.title.lowercase(),
+                    color = ForgeTextSecondary,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                ForgeFileMenuButton(onPickCodeFile, onNewFile, onOpenArchive)
+                Box {
+                    ForgeTextButton("⋮", onClick = { showMenu = true }, compact = true)
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        ForgeWorkspace.values().forEach { workspace ->
+                            DropdownMenuItem(
+                                text = { Text(workspace.title) },
+                                onClick = { onWorkspaceSelected(workspace); showMenu = false },
+                            )
+                        }
+                        DropdownMenuItem(text = { Text("Updates") }, onClick = { onCheckUpdates(); showMenu = false })
+                        DropdownMenuItem(text = { Text("Notify") }, onClick = { onEnableNotifications(); showMenu = false })
+                        if (showAssistantMenuItem) DropdownMenuItem(text = { Text("AI Chat") }, onClick = { onToggleAssistant(); showMenu = false })
+                        if (state.updateReady) DropdownMenuItem(text = { Text("Install update") }, onClick = { onInstallUpdate(); showMenu = false })
+                    }
+                }
+                ForgeAccentButton("▶ Run", onClick = { onRunAction(ForgeAction.RUN) })
+            } else {
+                Text("AI Studio", color = ForgeMuted, fontSize = 10.sp, modifier = Modifier.weight(1f))
+                    ForgeFileMenuButton(onPickCodeFile, onNewFile, onOpenArchive)
+                ForgeTextButton("Explorer", onClick = { onActivitySelected(ForgeActivity.EXPLORER) }, compact = true)
+                ForgeWorkspace.values().forEach { workspace ->
+                    ForgeChip(workspace.title, selected = workspace == state.workspace) { onWorkspaceSelected(workspace) }
+                }
+                if (state.modelLoaded) {
+                    Text("●", color = ForgeGreen, fontSize = 9.sp)
+                    Text(state.modelName, color = ForgeMuted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                Row(
+                    Modifier.background(ForgePanel, RoundedCornerShape(6.dp)).padding(horizontal = 7.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    ForgeCopilotLogo(height = 14.dp, modifier = Modifier.padding(end = 5.dp))
+                    Text("Copilot • Forge Edition", color = ForgeMuted, fontSize = 9.sp, maxLines = 1)
+                }
+                Box {
+                    ForgeTextButton("⋮", onClick = { showMenu = true }, compact = true)
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(text = { Text("Updates") }, onClick = { onCheckUpdates(); showMenu = false })
+                        DropdownMenuItem(text = { Text("Notify") }, onClick = { onEnableNotifications(); showMenu = false })
+                        if (showAssistantMenuItem) DropdownMenuItem(text = { Text("AI Chat") }, onClick = { onToggleAssistant(); showMenu = false })
+                        if (state.updateReady) DropdownMenuItem(text = { Text("Install update") }, onClick = { onInstallUpdate(); showMenu = false })
+                    }
+                }
+                ForgeAccentButton("▶ Run", onClick = { onRunAction(ForgeAction.RUN) })
             }
         }
         Divider(color = ForgeBorder, thickness = 1.dp)
+    }
+}
+
+@Composable
+private fun ForgeFileMenuButton(onPickCodeFile: () -> Unit, onNewFile: () -> Unit, onOpenArchive: () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        ForgeTextButton("File ▾", onClick = { expanded = true }, compact = true)
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(text = { Text("Open File") }, onClick = { onPickCodeFile(); expanded = false })
+            DropdownMenuItem(text = { Text("New File") }, onClick = { onNewFile(); expanded = false })
+            DropdownMenuItem(text = { Text("Import ZIP") }, onClick = { onOpenArchive(); expanded = false })
+        }
+    }
+}
+
+@Composable
+private fun ForgePreviewNote() {
+    Row(
+        Modifier.fillMaxWidth().background(ForgePanel).padding(horizontal = 10.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Text("PREVIEW UI", color = ForgeOrange, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+        Text(
+            "Catatan: beberapa kontrol masih tampilan; engine native belum semuanya terhubung.",
+            color = ForgeMuted,
+            fontSize = 8.sp,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
@@ -451,47 +534,128 @@ private fun formatBytes(value: Long): String = when {
 }
 
 @Composable
+private fun ForgeWorkspaceSidebar(
+    state: ForgeUiState,
+    onPickCodeFile: () -> Unit,
+    onPickModelFile: () -> Unit,
+    onNewFile: () -> Unit,
+    onAiSectionSelected: (ForgeAiSection) -> Unit,
+    onRunAction: (ForgeAction) -> Unit,
+    onCloseDrawer: (() -> Unit)? = null,
+    modifier: Modifier = Modifier,
+) {
+    if (state.workspace == ForgeWorkspace.AI_ENGINEERING) {
+        Column(modifier.background(ForgeSurface).border(0.5.dp, ForgeBorder).padding(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("AI ENGINEERING", color = ForgeMuted, fontSize = 10.sp, letterSpacing = 1.sp, modifier = Modifier.weight(1f))
+                if (onCloseDrawer != null) ForgeTextButton("×", onClick = onCloseDrawer, compact = true)
+                ForgeTextButton("+", onClick = onNewFile, compact = true)
+            }
+            Spacer(Modifier.height(10.dp))
+            ForgeAiSection.values().forEach { section ->
+                Text(
+                    section.title,
+                    color = if (section == state.aiSection) ForgeText else ForgeMuted,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    modifier = Modifier.fillMaxWidth()
+                        .background(if (section == state.aiSection) ForgePanelRaised else ForgeSurface, RoundedCornerShape(5.dp))
+                        .clickable { onAiSectionSelected(section) }
+                        .padding(horizontal = 9.dp, vertical = 8.dp),
+                )
+            }
+            Divider(color = ForgeBorder, modifier = Modifier.padding(vertical = 9.dp))
+            when (state.aiSection) {
+                ForgeAiSection.AI_CODE -> {
+                    Text("FORGE WORKSPACE", color = ForgeMutedSecondary, fontSize = 9.sp, letterSpacing = 1.sp)
+                    Spacer(Modifier.height(8.dp))
+                    ForgeTextButton("Open code file", onClick = onPickCodeFile)
+                    ForgeTextButton("Run / Build", onClick = { onRunAction(ForgeAction.BUILD) })
+                }
+                ForgeAiSection.MODELS -> {
+                    Text("MODEL REGISTRY", color = ForgeMutedSecondary, fontSize = 9.sp, letterSpacing = 1.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Text(state.modelName, color = ForgeTextSecondary, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(if (state.modelLoaded) "● Loaded" else "○ No model selected", color = if (state.modelLoaded) ForgeGreen else ForgeMuted, fontSize = 10.sp, modifier = Modifier.padding(top = 5.dp))
+                    ForgeTextButton("Buka isi model", onClick = onPickModelFile)
+                }
+                ForgeAiSection.TRAINING -> {
+                    Text("MODEL • QUANT • TRAIN", color = ForgeMutedSecondary, fontSize = 9.sp, letterSpacing = 1.sp)
+                    Spacer(Modifier.height(8.dp))
+                    ForgeChip("Train LoRA", false) { onRunAction(ForgeAction.TRAIN_LORA) }
+                    ForgeChip("Train QLoRA", false) { onRunAction(ForgeAction.TRAIN_QLORA) }
+                    ForgeChip("Full fine-tune", false) { onRunAction(ForgeAction.FULL_FINE_TUNE) }
+                }
+                else -> {
+                    Text(state.aiSection.title.uppercase(), color = ForgeMutedSecondary, fontSize = 9.sp, letterSpacing = 1.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Panel ini mengikuti kategori AI Engineering pada UI Workbench.", color = ForgeMuted, fontSize = 10.sp, lineHeight = 15.sp)
+                }
+            }
+        }
+    } else {
+        ForgeExplorer(state, onPickCodeFile, onPickModelFile, onNewFile, onCloseDrawer, modifier)
+    }
+}
+
+@Composable
 private fun ForgeActivityRail(activity: ForgeActivity, onActivitySelected: (ForgeActivity) -> Unit, vertical: Boolean) {
-    val rowModifier = if (vertical) Modifier.width(50.dp).fillMaxHeight().padding(vertical = 8.dp) else Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp)
+    val rowModifier = if (vertical) Modifier.width(50.dp).fillMaxHeight() else Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp)
     if (vertical) {
         Column(rowModifier.background(ForgeBackground).border(width = 0.5.dp, color = ForgeBorder), horizontalAlignment = Alignment.CenterHorizontally) {
-            ForgeActivity.values().forEach { ForgeActivityButton(it, it == activity, onActivitySelected) }
+            ForgeActivity.values().forEach { ForgeActivityButton(it, it == activity, onActivitySelected, showLabel = false) }
             Spacer(Modifier.weight(1f))
-            Text("⚙", color = ForgeMutedSecondary, fontSize = 18.sp, modifier = Modifier.padding(bottom = 8.dp))
+            Text("⌘K", color = ForgeMutedSecondary, fontSize = 9.sp, modifier = Modifier.padding(vertical = 7.dp))
+            Box(Modifier.padding(bottom = 8.dp).size(28.dp).background(Brush.linearGradient(listOf(ForgeOrange, ForgePink)), CircleShape), contentAlignment = Alignment.Center) {
+                Text("F", color = ForgeText, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            }
         }
     } else {
         Row(rowModifier.background(ForgeBackground).horizontalScroll(rememberScrollState()).border(width = 0.5.dp, color = ForgeBorder), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            ForgeActivity.values().forEach { ForgeActivityButton(it, it == activity, onActivitySelected) }
+            ForgeActivity.values().forEach { ForgeActivityButton(it, it == activity, onActivitySelected, showLabel = true) }
         }
     }
 }
 
 @Composable
-private fun ForgeActivityButton(item: ForgeActivity, selected: Boolean, onActivitySelected: (ForgeActivity) -> Unit) {
+private fun ForgeActivityButton(item: ForgeActivity, selected: Boolean, onActivitySelected: (ForgeActivity) -> Unit, showLabel: Boolean) {
     Column(
-        Modifier.padding(horizontal = 4.dp, vertical = 3.dp).size(width = 52.dp, height = 45.dp)
+        Modifier.padding(horizontal = 4.dp, vertical = 3.dp).size(width = 42.dp, height = if (showLabel) 45.dp else 42.dp)
             .background(if (selected) ForgePanel else ForgeBackground, RoundedCornerShape(8.dp))
             .clickable { onActivitySelected(item) },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Text(item.mark, color = if (selected) ForgeText else ForgeMutedSecondary, fontSize = 18.sp)
-        Text(item.title.substringBefore(' '), color = if (selected) ForgeTextSecondary else ForgeMutedSecondary, fontSize = 8.sp, maxLines = 1)
+        if (showLabel) Text(item.title.substringBefore(' '), color = if (selected) ForgeTextSecondary else ForgeMutedSecondary, fontSize = 8.sp, maxLines = 1)
     }
 }
 
 @Composable
-private fun ForgeExplorer(state: ForgeUiState, onPickCodeFile: () -> Unit, onPickModelFile: () -> Unit, modifier: Modifier = Modifier) {
+private fun ForgeExplorer(
+    state: ForgeUiState,
+    onPickCodeFile: () -> Unit,
+    onPickModelFile: () -> Unit,
+    onNewFile: () -> Unit,
+    onCloseDrawer: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
     Column(modifier.background(ForgeSurface).border(width = 0.5.dp, color = ForgeBorder).padding(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(state.activity.title.uppercase(), color = ForgeMuted, fontSize = 10.sp, letterSpacing = 1.sp, modifier = Modifier.weight(1f))
-            ForgeTextButton("+", onClick = onPickCodeFile, compact = true)
+            if (onCloseDrawer != null) ForgeTextButton("×", onClick = onCloseDrawer, compact = true)
+            ForgeTextButton("+", onClick = onNewFile, compact = true)
         }
         Spacer(Modifier.height(12.dp))
         when (state.activity) {
             ForgeActivity.EXPLORER -> {
                 ExplorerRow("⌄", "FORGE WORKSPACE", true)
-                ExplorerRow("▸", state.fileName, false, selected = true)
+                if (state.fileName.isBlank()) {
+                    Text("Workspace masih kosong", color = ForgeMutedSecondary, fontSize = 10.sp, modifier = Modifier.padding(start = 17.dp, top = 6.dp))
+                    ForgeTextButton("Open File", onClick = onPickCodeFile)
+                } else {
+                    ExplorerRow("▸", state.fileName, false, selected = true)
+                }
                 ExplorerRow("▸", "models", true)
                 ExplorerRow("◇", state.modelName, false)
             }
@@ -540,47 +704,133 @@ private fun ForgeEditorArea(
     onSendPrompt: (String) -> Unit,
     onRunAction: (ForgeAction) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenArchive: () -> Unit = {},
+    onStartNewFile: () -> Unit = {},
+    onOpenExplorer: () -> Unit = {},
+    onCloseFile: () -> Unit = {},
+    onOpenFolder: () -> Unit = {},
 ) {
+    var inlinePrompt by remember { mutableStateOf("") }
+    val workspaceEmpty = state.fileName.isBlank() && editorText.isBlank()
     Column(modifier.background(ForgeBackground)) {
         Row(
-            Modifier.fillMaxWidth().height(42.dp).background(ForgeSurface).padding(horizontal = 12.dp),
+            Modifier.fillMaxWidth().height(34.dp).background(ForgeSurface).padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("◦", color = ForgeOrange, fontSize = 18.sp, modifier = Modifier.padding(end = 7.dp))
-            Text(state.fileName, color = ForgeTextSecondary, fontSize = 11.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            ForgeTextButton("Ask AI", onClick = { if (editorText.isNotBlank()) onSendPrompt(editorText) }, compact = true)
-            ForgeTextButton("Open", onClick = onPickCodeFile, compact = true)
+            Text("◇", color = ForgeOrange, fontSize = 14.sp, modifier = Modifier.padding(end = 7.dp))
+            Text(state.fileName.ifBlank { "Forge workspace" }, color = ForgeTextSecondary, fontSize = 10.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
             ForgeTextButton("Save", onClick = onSave, compact = true)
+            ForgeTextButton("All", onClick = onSave, compact = true)
+            ForgeTextButton("×", onClick = onCloseFile, compact = true)
         }
         Row(
-            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).background(ForgeBackground).padding(horizontal = 8.dp, vertical = 7.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            Modifier.fillMaxWidth().height(42.dp).background(ForgeBackground).padding(horizontal = 8.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            ForgeAction.values().forEach { action ->
-                ForgeChip(action.title, selected = action == ForgeAction.RUN) { onRunAction(action) }
-            }
+            ForgeCopilotLogo(height = 13.dp)
+            Text("Inline", color = ForgeMuted, fontSize = 9.sp)
+            ForgeInput("Ask Copilot… (/explain, /fix, /decompile)", inlinePrompt, { inlinePrompt = it }, Modifier.weight(1f))
+            ForgeAccentButton("Send", onClick = {
+                if (inlinePrompt.isNotBlank()) {
+                    onSendPrompt(inlinePrompt.trim())
+                    inlinePrompt = ""
+                }
+            })
         }
-        Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp)) {
+        Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp, vertical = 5.dp)) {
             if (state.loading) {
                 CircularProgressIndicator(color = ForgeOrange, modifier = Modifier.size(26.dp).align(Alignment.TopEnd), strokeWidth = 2.dp)
             }
-            BasicTextField(
-                value = editorText,
-                onValueChange = onEditorTextChanged,
-                modifier = Modifier.fillMaxSize().background(ForgeBackground).verticalScroll(rememberScrollState()),
-                textStyle = TextStyle(color = ForgeTextSecondary, fontSize = 13.sp, lineHeight = 20.sp, fontFamily = FontFamily.Monospace),
-                decorationBox = { inner ->
-                    Box {
-                        if (editorText.isEmpty()) Text("Mulai mengetik…", color = ForgeMutedSecondary, fontFamily = FontFamily.Monospace, fontSize = 13.sp)
-                        inner()
-                    }
-                },
-            )
+            if (workspaceEmpty) {
+                ForgeEmptyWorkspace(
+                    onOpenFile = onPickCodeFile,
+                    onOpenArchive = onOpenArchive,
+                    onNewFile = onStartNewFile,
+                    onOpenExplorer = onOpenExplorer,
+                    onOpenFolder = onOpenFolder,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                BasicTextField(
+                    value = editorText,
+                    onValueChange = onEditorTextChanged,
+                    modifier = Modifier.fillMaxSize().background(ForgeBackground).verticalScroll(rememberScrollState()),
+                    textStyle = TextStyle(color = ForgeTextSecondary, fontSize = 13.sp, lineHeight = 20.sp, fontFamily = FontFamily.Monospace),
+                    decorationBox = { inner ->
+                        Box {
+                            if (editorText.isEmpty()) Text("Mulai mengetik…", color = ForgeMutedSecondary, fontFamily = FontFamily.Monospace, fontSize = 13.sp)
+                            inner()
+                        }
+                    },
+                )
+            }
         }
         if (state.updateReady && state.updateMessage.isNotBlank()) {
             Text("Update: ${state.updateMessage}", color = ForgeMuted, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
         }
     }
+}
+
+@Composable
+private fun ForgeEmptyWorkspace(
+    onOpenFile: () -> Unit,
+    onOpenArchive: () -> Unit,
+    onNewFile: () -> Unit,
+    onOpenExplorer: () -> Unit,
+    onOpenFolder: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Box(
+            Modifier.size(64.dp).background(Brush.linearGradient(listOf(ForgeOrange, ForgePink)), RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            ForgeCopilotLogo(height = 23.dp)
+        }
+        Spacer(Modifier.height(12.dp))
+        Text("Forge AI Engineering", color = ForgeText, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+        Text(
+            "Tidak ada file terbuka. Buka file, impor ZIP atau tempel kode untuk mulai mengedit.",
+            color = ForgeMuted,
+            fontSize = 11.sp,
+            lineHeight = 16.sp,
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 12.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ForgeEmptyActionButton("Open File", primary = true, onClick = onOpenFile, modifier = Modifier.weight(1f))
+            ForgeEmptyActionButton("Import ZIP", onClick = onOpenArchive, modifier = Modifier.weight(1f))
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ForgeEmptyActionButton("Import Code", onClick = onOpenFile, modifier = Modifier.weight(1f))
+            ForgeEmptyActionButton("New File", onClick = onNewFile, modifier = Modifier.weight(1f))
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ForgeEmptyActionButton("Open Folder", onClick = onOpenFolder, modifier = Modifier.weight(1f))
+            ForgeEmptyActionButton("Open Explorer", onClick = onOpenExplorer, modifier = Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun ForgeEmptyActionButton(label: String, primary: Boolean = false, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Text(
+        label,
+        color = if (primary) Color(0xFF111113) else ForgeTextSecondary,
+        fontSize = 10.sp,
+        fontWeight = if (primary) FontWeight.SemiBold else FontWeight.Normal,
+        maxLines = 1,
+        modifier = modifier.padding(vertical = 4.dp)
+            .background(if (primary) ForgeText else ForgePanel, RoundedCornerShape(7.dp))
+            .border(0.5.dp, ForgeBorder, RoundedCornerShape(7.dp))
+            .clickable(onClick = onClick).padding(horizontal = 9.dp, vertical = 9.dp),
+        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+    )
 }
 
 @Composable
@@ -591,6 +841,35 @@ private fun ForgeCopilotLogo(height: Dp, modifier: Modifier = Modifier) {
         contentScale = ContentScale.Fit,
         modifier = modifier.height(height).aspectRatio(2f),
     )
+}
+
+@Composable
+private fun ForgeFloatingButton(
+    copilot: Boolean = false,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (copilot) {
+        Box(
+            modifier.size(46.dp).background(Brush.linearGradient(listOf(ForgeOrange, ForgePink)), CircleShape)
+                .border(0.5.dp, ForgeBorder, CircleShape).clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            ForgeCopilotLogo(height = 21.dp)
+        }
+    } else {
+        Row(
+            modifier.background(ForgePanel, RoundedCornerShape(20.dp)).border(0.5.dp, ForgeBorder, RoundedCornerShape(20.dp))
+                .clickable(onClick = onClick).padding(end = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(36.dp).background(ForgePanelRaised, CircleShape), contentAlignment = Alignment.Center) {
+                Text("▤", color = ForgeOrange, fontSize = 16.sp)
+            }
+            Text(label, color = ForgeTextSecondary, fontSize = 9.sp, modifier = Modifier.padding(start = 6.dp))
+        }
+    }
 }
 
 @Composable
@@ -636,7 +915,7 @@ private fun ForgeAssistantPanel(
 @Composable
 private fun ForgeBottomPanel(state: ForgeUiState, selectedTab: String, onTabSelected: (String) -> Unit) {
     val tabs = listOf("Problems", "Output", "Terminal", "Inference", "Trainer")
-    Column(Modifier.fillMaxWidth().height(154.dp).background(ForgeSurface).border(width = 0.5.dp, color = ForgeBorder)) {
+    Column(Modifier.fillMaxWidth().height(220.dp).background(ForgeSurface).border(width = 0.5.dp, color = ForgeBorder)) {
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
             tabs.forEach { tab ->
                 Column(Modifier.clickable { onTabSelected(tab) }, horizontalAlignment = Alignment.CenterHorizontally) {
@@ -649,9 +928,20 @@ private fun ForgeBottomPanel(state: ForgeUiState, selectedTab: String, onTabSele
         Column(Modifier.fillMaxWidth().weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 7.dp)) {
             when (selectedTab) {
                 "Problems" -> Text("No problem data reported", color = ForgeMutedSecondary, fontSize = 10.sp)
-                "Output", "Terminal" -> if (state.consoleLogs.isEmpty()) {
+                "Output" -> if (state.consoleLogs.isEmpty()) {
                     Text("Belum ada output", color = ForgeMutedSecondary, fontSize = 10.sp)
                 } else state.consoleLogs.takeLast(40).forEach { Text(it, color = ForgeTextSecondary, fontFamily = FontFamily.Monospace, fontSize = 10.sp, lineHeight = 15.sp) }
+                "Terminal" -> Column(Modifier.fillMaxWidth()) {
+                    if (state.consoleLogs.isEmpty()) {
+                        Text("Terminal preview • shell host belum diaktifkan", color = ForgeMuted, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                    } else {
+                        state.consoleLogs.takeLast(20).forEach { Text(it, color = ForgeTextSecondary, fontFamily = FontFamily.Monospace, fontSize = 10.sp, lineHeight = 15.sp) }
+                    }
+                    Row(Modifier.padding(top = 7.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("›", color = ForgeOrange, fontSize = 14.sp)
+                        Text(" forge$", color = ForgeMutedSecondary, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                    }
+                }
                 "Inference" -> Text(if (state.modelLoaded) "Model: ${state.modelName}" else "Pilih model untuk memulai inference.", color = ForgeMuted, fontSize = 10.sp)
                 "Trainer" -> Text("Training actions are delegated to the host app.", color = ForgeMuted, fontSize = 10.sp)
             }

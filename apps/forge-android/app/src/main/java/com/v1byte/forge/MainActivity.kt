@@ -43,9 +43,9 @@ class MainActivity : ComponentActivity() {
     private var uiState by mutableStateOf(
         ForgeUiState(
             workspace = ForgeWorkspace.CODE,
-            fileName = "README.md",
-            fileContent = "# Forge AI Studio\n\nPilih file kode atau model GGUF dari perangkat untuk mulai.\n",
-            statusText = "Native workspace • llama.cpp siap saat model dipilih",
+            fileName = "",
+            fileContent = "",
+            statusText = "Workspace kosong • pilih file atau model untuk mulai",
             deviceSummary = "${Build.MANUFACTURER} ${Build.MODEL} • Android ${Build.VERSION.RELEASE} • ABI ${Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown"}",
         ),
     )
@@ -129,6 +129,21 @@ class MainActivity : ComponentActivity() {
                     onActivitySelected = { activity -> uiState = uiState.copy(activity = activity) },
                     onPickCodeFile = ::launchCodePicker,
                     onPickModelFile = ::launchModelPicker,
+                    onNewFile = {
+                        selectedCodeUri = null
+                        pendingSaveText = null
+                        uiState = uiState.copy(
+                            fileName = "untitled.txt",
+                            fileContent = "",
+                            statusText = "File baru • belum disimpan",
+                        )
+                    },
+                    onCloseFile = {
+                        selectedCodeUri = null
+                        pendingSaveText = null
+                        uiState = uiState.copy(fileName = "", fileContent = "", statusText = "Workspace kosong")
+                    },
+                    onOpenFolder = { updateStatus("Pemilih folder belum tersedia; gunakan Open File untuk memilih berkas.") },
                     onSendPrompt = ::sendPrompt,
                     onChatSend = ::sendPrompt,
                     onRunAction = ::runAction,
