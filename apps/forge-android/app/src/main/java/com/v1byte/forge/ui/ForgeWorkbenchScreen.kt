@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -104,12 +103,14 @@ public fun ForgeWorkbenchScreen(
     ) {
         val wide = maxWidth >= 1100.dp
         val medium = maxWidth >= 720.dp
+        val showExplorer = maxWidth >= 900.dp
         Column(Modifier.fillMaxSize()) {
             ForgeTopBar(
                 state = state,
                 onWorkspaceSelected = onWorkspaceSelected,
                 onRunAction = onRunAction,
                 onCheckUpdates = onCheckUpdates,
+                onInstallUpdate = onInstallUpdate,
                 onEnableNotifications = onEnableNotifications,
                 showAssistantToggle = !wide,
                 onToggleAssistant = { showCompactAssistant = !showCompactAssistant },
@@ -117,7 +118,7 @@ public fun ForgeWorkbenchScreen(
             if (medium) {
                 Row(Modifier.weight(1f).fillMaxWidth()) {
                     ForgeActivityRail(state.activity, onActivitySelected, vertical = true)
-                    if (maxWidth >= 900.dp) {
+                    if (showExplorer) {
                         ForgeExplorer(state, onPickCodeFile, onPickModelFile, Modifier.width(212.dp).fillMaxHeight())
                     }
                     ForgeEditorArea(
@@ -193,6 +194,7 @@ private fun ForgeTopBar(
     onWorkspaceSelected: (ForgeWorkspace) -> Unit,
     onRunAction: (ForgeAction) -> Unit,
     onCheckUpdates: () -> Unit,
+    onInstallUpdate: () -> Unit,
     onEnableNotifications: () -> Unit,
     showAssistantToggle: Boolean,
     onToggleAssistant: () -> Unit,
