@@ -1,6 +1,6 @@
 # Forge Android (native)
 
-Aplikasi ini adalah port Android native berbasis Kotlin dan Jetpack Compose untuk UI Forge Workbench yang disertakan pengguna. UI web bukan runtime aplikasi. Palet, struktur workbench, activity bar, editor, panel bawah, dan AI panel dipakai sebagai acuan visual.
+Aplikasi ini adalah port Android native berbasis Kotlin dan Jetpack Compose untuk UI Forge Workbench yang disertakan pengguna. UI web bukan runtime aplikasi. Palet, struktur workbench, activity bar, editor, panel bawah, dan AI panel dipakai sebagai acuan visual. UI launcher utama berada di `MainActivity` dan seluruh layar workbench ditampilkan dengan Compose; tidak ada WebView yang memuat frontend HTML. Status port serta batas setiap fitur tercatat di [NATIVE_PORT_STATUS.md](NATIVE_PORT_STATUS.md).
 
 Spesifikasi tampilan, breakpoint, fungsi tiap komponen, token warna, dan batas fitur saat ini dijelaskan di [UI_SPEC.md](UI_SPEC.md).
 

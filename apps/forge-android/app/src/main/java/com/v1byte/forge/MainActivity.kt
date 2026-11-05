@@ -22,6 +22,8 @@ import com.v1byte.forge.notifications.enablePushNotifications
 import com.v1byte.forge.notifications.isPushConfigured
 import com.v1byte.forge.ui.ForgeAction
 import com.v1byte.forge.ui.ForgeActivity
+import com.v1byte.forge.ui.ForgeAiSection
+import com.v1byte.forge.ui.ForgeArchiveEntry
 import com.v1byte.forge.ui.ForgeChatMessage
 import com.v1byte.forge.ui.ForgeTheme
 import com.v1byte.forge.ui.ForgeUiState
@@ -35,6 +37,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
+import java.util.zip.ZipFile
 
 class MainActivity : ComponentActivity() {
     private var uiState by mutableStateOf(
@@ -43,6 +46,7 @@ class MainActivity : ComponentActivity() {
             fileName = "README.md",
             fileContent = "# Forge AI Studio\n\nPilih file kode atau model GGUF dari perangkat untuk mulai.\n",
             statusText = "Native workspace • llama.cpp siap saat model dipilih",
+            deviceSummary = "${Build.MANUFACTURER} ${Build.MODEL} • Android ${Build.VERSION.RELEASE} • ABI ${Build.SUPPORTED_ABIS.firstOrNull() ?: "unknown"}",
         ),
     )
 
@@ -76,6 +80,12 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri != null) importAndLoadModel(uri)
+    }
+
+    private val openArchiveFile = registerForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) readArchive(uri)
     }
 
     private val notificationPermission = registerForActivityResult(
@@ -115,6 +125,7 @@ class MainActivity : ComponentActivity() {
                 ForgeWorkbenchScreen(
                     state = currentState,
                     onWorkspaceSelected = { workspace -> uiState = uiState.copy(workspace = workspace) },
+                    onAiSectionSelected = { section -> uiState = uiState.copy(aiSection = section) },
                     onActivitySelected = { activity -> uiState = uiState.copy(activity = activity) },
                     onPickCodeFile = ::launchCodePicker,
                     onPickModelFile = ::launchModelPicker,
@@ -122,6 +133,7 @@ class MainActivity : ComponentActivity() {
                     onChatSend = ::sendPrompt,
                     onRunAction = ::runAction,
                     onSaveEditor = ::saveCodeFile,
+                    onOpenArchive = ::launchArchivePicker,
                     onCheckUpdates = { updateController.checkForUpdate(autoStart = true) },
                     onInstallUpdate = { updateController.completeUpdate() },
                     onEnableNotifications = ::requestPushPermission,
@@ -159,6 +171,68 @@ class MainActivity : ComponentActivity() {
     private fun launchModelPicker() {
         inspectModelOnly = false
         openModelFile.launch(arrayOf("application/octet-stream", "application/*", "*/*"))
+    }
+
+    private fun launchArchivePicker() {
+        openArchiveFile.launch(arrayOf("application/zip", "application/octet-stream", "*/*"))
+    }
+
+    private fun readArchive(uri: Uri) {
+        retainSafAccess(uri, allowWrite = false)
+        uiState = uiState.copy(loading = true, statusText = "Membaca daftar ZIP…")
+        lifecycleScope.launch {
+            try {
+                val displayName = queryDisplayName(uri) ?: "archive.zip"
+                val entries = withContext(Dispatchers.IO) {
+                    val staged = File(cacheDir, "forge-archive-${System.nanoTime()}.zip")
+                    try {
+                        val input = contentResolver.openInputStream(uri)
+                            ?: throw IOException("Tidak dapat membaca arsip")
+                        input.use { source ->
+                            staged.outputStream().buffered().use { output ->
+                                val buffer = ByteArray(64 * 1024)
+                                var total = 0L
+                                while (true) {
+                                    val count = source.read(buffer)
+                                    if (count < 0) break
+                                    total += count
+                                    if (total > MAX_ARCHIVE_BYTES) {
+                                        throw IOException("ZIP melebihi batas impor 512 MB")
+                                    }
+                                    output.write(buffer, 0, count)
+                                }
+                            }
+                        }
+                        ZipFile(staged).use { zip ->
+                            val result = ArrayList<ForgeArchiveEntry>()
+                            val iterator = zip.entries()
+                            while (iterator.hasMoreElements() && result.size < MAX_ARCHIVE_ENTRIES) {
+                                val entry = iterator.nextElement()
+                                result += ForgeArchiveEntry(
+                                    name = entry.name,
+                                    isDirectory = entry.isDirectory,
+                                    sizeBytes = entry.size.coerceAtLeast(0L),
+                                )
+                            }
+                            result
+                        }
+                    } finally {
+                        staged.delete()
+                    }
+                }
+                uiState = uiState.copy(
+                    archiveFileName = displayName,
+                    archiveEntries = entries,
+                    loading = false,
+                    statusText = "Daftar ZIP dibaca lokal • ${entries.size} entries ditampilkan",
+                )
+                appendConsole("ZIP indexed: $displayName (${entries.size} entries)")
+            } catch (error: Exception) {
+                uiState = uiState.copy(loading = false, archiveEntries = emptyList())
+                updateStatus("Gagal membaca ZIP: ${error.message ?: "format tidak valid"}")
+                appendConsole("ZIP read failed: ${error.message ?: error.javaClass.simpleName}")
+            }
+        }
     }
 
     private fun launchModelInspectionPicker() {
@@ -381,5 +455,10 @@ class MainActivity : ComponentActivity() {
         null,
     )?.use { cursor ->
         if (cursor.moveToFirst()) cursor.getString(0) else null
+    }
+
+    private companion object {
+        const val MAX_ARCHIVE_BYTES = 512L * 1024L * 1024L
+        const val MAX_ARCHIVE_ENTRIES = 2_000
     }
 }
