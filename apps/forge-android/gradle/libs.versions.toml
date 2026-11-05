@@ -4,6 +4,7 @@ kotlin = "2.3.0"
 compose-bom = "2025.08.00"
 activity-compose = "1.12.2"
 core-ktx = "1.17.0"
+fragment-ktx = "1.8.5"
 datastore-preferences = "1.2.0"
 coroutines = "1.10.2"
 firebase-bom = "35.1.0"
@@ -24,6 +25,7 @@ google-services = { id = "com.google.gms.google-services", version.ref = "google
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "core-ktx" }
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore-preferences" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activity-compose" }
+androidx-fragment-ktx = { group = "androidx.fragment", name = "fragment-ktx", version.ref = "fragment-ktx" }
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "compose-bom" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
