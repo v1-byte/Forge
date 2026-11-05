@@ -7,7 +7,7 @@ Spesifikasi tampilan, breakpoint, fungsi tiap komponen, token warna, dan batas f
 ## Komponen native
 
 - `app/`: UI Jetpack Compose, pemilihan file dengan Storage Access Framework, notifikasi Firebase, dan Google Play In-App Updates.
-- `:llamaRuntime`: langsung menunjuk ke `forge-engine/forge-inference/examples/llama.android/lib`, yaitu wrapper JNI llama.cpp yang telah berada di repo Forge.
+- `:llamaRuntime`: wrapper JNI Kotlin/C++ llama.cpp pada `forge-engine/forge-inference/examples/llama.android/lib`, dibangun terhadap source `forge-engine/forge-inference`.
 - `minSdk 33`, `compileSdk 36`; ABI aplikasi `arm64-v8a`.
 - Package ID sementara: `com.v1byte.forge`. Ganti hanya sebelum membuat app listing Firebase/Play permanen; package ID harus sama pada keduanya.
 
@@ -20,7 +20,7 @@ cd apps/forge-android
 ./gradlew :app:assembleDebug
 ```
 
-Build membutuhkan checkout repo Forge utuh karena modul runtime llama.cpp dirujuk dari `forge-engine/forge-inference/examples/llama.android/lib` dan CMake-nya membangun source `forge-engine/forge-inference`.
+Build membutuhkan checkout repo Forge utuh. Modul JNI di `forge-engine/forge-inference/examples/llama.android/lib` membangun source `forge-engine/forge-inference`. Workflow `Forge Native Android APK` menjalankan unit tests serta build debug dan release, lalu menyimpan kedua APK sebagai artifact CI sementara. APK debug ditandatangani dengan debug key dan untuk pengujian; APK release dari workflow ini belum ditandatangani dengan production keystore.
 
 ## Google Play in-app update
 
