@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -46,7 +45,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 
 public enum class ForgeWorkspace(val title: String) {
-    CODE("Code"), AI_ENGINEERING("AI Engineering"), TRAINING("Training"), ARCHIVE("Archive")
+    CODE("Kode Biasa"), AI_ENGINEERING("AI Engineering"), ARCHIVE("Archive / Bongkar")
+}
+
+public enum class ForgeAiSection(val title: String) {
+    AI_CODE("AI Code"), MODELS("Models"), SYSTEM("System"), TOKENS("Tokens"),
+    ENGINES("Engines"), MACHINE("Machine"), TRAINING("Training")
 }
 
 public enum class ForgeActivity(val title: String, val mark: String) {
@@ -62,10 +66,12 @@ public enum class ForgeAction(val title: String) {
 
 public data class ForgeChatMessage(val role: String, val content: String)
 
+public data class ForgeArchiveEntry(val name: String, val isDirectory: Boolean, val sizeBytes: Long)
+
 public data class ForgeUiState(
     val workspace: ForgeWorkspace = ForgeWorkspace.CODE,
     val activity: ForgeActivity = ForgeActivity.EXPLORER,
-    val aiSection: String = "Assistant",
+    val aiSection: ForgeAiSection = ForgeAiSection.AI_CODE,
     val fileName: String = "README.md",
     val fileContent: String = "# Forge Workbench\n\nSelect a file or model to get started.\n",
     val modelName: String = "No model selected",
@@ -77,12 +83,16 @@ public data class ForgeUiState(
     val updateReady: Boolean = false,
     val updateMessage: String = "",
     val pushConfigured: Boolean = false,
+    val archiveFileName: String = "",
+    val archiveEntries: List<ForgeArchiveEntry> = emptyList(),
+    val deviceSummary: String = "",
 )
 
 @Composable
 public fun ForgeWorkbenchScreen(
     state: ForgeUiState,
     onWorkspaceSelected: (ForgeWorkspace) -> Unit,
+    onAiSectionSelected: (ForgeAiSection) -> Unit,
     onActivitySelected: (ForgeActivity) -> Unit,
     onPickCodeFile: () -> Unit,
     onPickModelFile: () -> Unit,
@@ -90,6 +100,7 @@ public fun ForgeWorkbenchScreen(
     onChatSend: (String) -> Unit,
     onRunAction: (ForgeAction) -> Unit,
     onSaveEditor: (String) -> Unit,
+    onOpenArchive: () -> Unit,
     onCheckUpdates: () -> Unit,
     onInstallUpdate: () -> Unit,
     onEnableNotifications: () -> Unit,
@@ -104,60 +115,85 @@ public fun ForgeWorkbenchScreen(
     ) {
         val wide = maxWidth >= 1100.dp
         val medium = maxWidth >= 720.dp
+        val showExplorer = maxWidth >= 900.dp
         Column(Modifier.fillMaxSize()) {
             ForgeTopBar(
                 state = state,
                 onWorkspaceSelected = onWorkspaceSelected,
                 onRunAction = onRunAction,
                 onCheckUpdates = onCheckUpdates,
+                onInstallUpdate = onInstallUpdate,
                 onEnableNotifications = onEnableNotifications,
                 showAssistantToggle = !wide,
                 onToggleAssistant = { showCompactAssistant = !showCompactAssistant },
             )
-            if (medium) {
-                Row(Modifier.weight(1f).fillMaxWidth()) {
-                    ForgeActivityRail(state.activity, onActivitySelected, vertical = true)
-                    if (maxWidth >= 900.dp) {
-                        ForgeExplorer(state, onPickCodeFile, onPickModelFile, Modifier.width(212.dp).fillMaxHeight())
+            Box(Modifier.weight(1f).fillMaxWidth()) {
+                when (state.workspace) {
+                    ForgeWorkspace.CODE -> if (medium) {
+                        Row(Modifier.fillMaxSize()) {
+                            ForgeActivityRail(state.activity, onActivitySelected, vertical = true)
+                            if (showExplorer) {
+                                ForgeExplorer(state, onPickCodeFile, onPickModelFile, Modifier.width(212.dp).fillMaxHeight())
+                            }
+                            ForgeEditorArea(
+                                state = state,
+                                editorText = editorText,
+                                onEditorTextChanged = { editorText = it },
+                                onSave = { onSaveEditor(editorText) },
+                                onPickCodeFile = onPickCodeFile,
+                                onSendPrompt = onSendPrompt,
+                                onRunAction = onRunAction,
+                                modifier = Modifier.weight(1f).fillMaxHeight(),
+                            )
+                            if (wide) {
+                                ForgeAssistantPanel(
+                                    state = state,
+                                    chatDraft = chatDraft,
+                                    onDraftChanged = { chatDraft = it },
+                                    onSend = {
+                                        val prompt = chatDraft.trim()
+                                        if (prompt.isNotEmpty()) {
+                                            onChatSend(prompt)
+                                            chatDraft = ""
+                                        }
+                                    },
+                                    modifier = Modifier.width(300.dp).fillMaxHeight(),
+                                )
+                            }
+                        }
+                    } else {
+                        Column(Modifier.fillMaxSize()) {
+                            ForgeActivityRail(state.activity, onActivitySelected, vertical = false)
+                            ForgeEditorArea(
+                                state = state,
+                                editorText = editorText,
+                                onEditorTextChanged = { editorText = it },
+                                onSave = { onSaveEditor(editorText) },
+                                onPickCodeFile = onPickCodeFile,
+                                onSendPrompt = onSendPrompt,
+                                onRunAction = onRunAction,
+                                modifier = Modifier.weight(1f).fillMaxWidth(),
+                            )
+                        }
                     }
-                    ForgeEditorArea(
+                    ForgeWorkspace.AI_ENGINEERING -> ForgeAiEngineeringWorkspace(
                         state = state,
                         editorText = editorText,
                         onEditorTextChanged = { editorText = it },
-                        onSave = { onSaveEditor(editorText) },
+                        onAiSectionSelected = onAiSectionSelected,
                         onPickCodeFile = onPickCodeFile,
+                        onPickModelFile = onPickModelFile,
+                        onSaveEditor = { onSaveEditor(editorText) },
                         onSendPrompt = onSendPrompt,
                         onRunAction = onRunAction,
-                        modifier = Modifier.weight(1f).fillMaxHeight(),
+                        modifier = Modifier.fillMaxSize(),
                     )
-                    if (wide) {
-                        ForgeAssistantPanel(
-                            state = state,
-                            chatDraft = chatDraft,
-                            onDraftChanged = { chatDraft = it },
-                            onSend = {
-                                val prompt = chatDraft.trim()
-                                if (prompt.isNotEmpty()) {
-                                    onChatSend(prompt)
-                                    chatDraft = ""
-                                }
-                            },
-                            modifier = Modifier.width(300.dp).fillMaxHeight(),
-                        )
-                    }
+                    ForgeWorkspace.ARCHIVE -> ForgeArchiveWorkspace(
+                        state = state,
+                        onOpenArchive = onOpenArchive,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
-            } else {
-                ForgeActivityRail(state.activity, onActivitySelected, vertical = false)
-                ForgeEditorArea(
-                    state = state,
-                    editorText = editorText,
-                    onEditorTextChanged = { editorText = it },
-                    onSave = { onSaveEditor(editorText) },
-                    onPickCodeFile = onPickCodeFile,
-                    onSendPrompt = onSendPrompt,
-                    onRunAction = onRunAction,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                )
             }
             ForgeBottomPanel(state, bottomTab, onTabSelected = { bottomTab = it })
             ForgeStatusBar(state)
@@ -193,6 +229,7 @@ private fun ForgeTopBar(
     onWorkspaceSelected: (ForgeWorkspace) -> Unit,
     onRunAction: (ForgeAction) -> Unit,
     onCheckUpdates: () -> Unit,
+    onInstallUpdate: () -> Unit,
     onEnableNotifications: () -> Unit,
     showAssistantToggle: Boolean,
     onToggleAssistant: () -> Unit,
@@ -240,6 +277,148 @@ private fun ForgeTopBar(
         }
         Divider(color = ForgeBorder, thickness = 1.dp)
     }
+}
+
+@Composable
+private fun ForgeAiEngineeringWorkspace(
+    state: ForgeUiState,
+    editorText: String,
+    onEditorTextChanged: (String) -> Unit,
+    onAiSectionSelected: (ForgeAiSection) -> Unit,
+    onPickCodeFile: () -> Unit,
+    onPickModelFile: () -> Unit,
+    onSaveEditor: () -> Unit,
+    onSendPrompt: (String) -> Unit,
+    onRunAction: (ForgeAction) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier.background(ForgeBackground)) {
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 10.dp, vertical = 7.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            ForgeAiSection.values().forEach { section ->
+                ForgeChip(section.title, selected = section == state.aiSection) { onAiSectionSelected(section) }
+            }
+        }
+        Divider(color = ForgeBorder)
+        when (state.aiSection) {
+            ForgeAiSection.AI_CODE -> ForgeEditorArea(
+                state = state,
+                editorText = editorText,
+                onEditorTextChanged = onEditorTextChanged,
+                onSave = onSaveEditor,
+                onPickCodeFile = onPickCodeFile,
+                onSendPrompt = onSendPrompt,
+                onRunAction = onRunAction,
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+            )
+            ForgeAiSection.MODELS -> Column(
+                Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                ForgeInfoCard(
+                    title = "GGUF Toolkit",
+                    subtitle = if (state.modelLoaded) "Model loaded: ${state.modelName}" else "Model belum dipilih",
+                    body = "Android file picker dan metadata reader tersedia. Model inference berjalan lewat JNI llama.cpp bila file GGUF kompatibel dan perangkat memiliki memori cukup.",
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ForgeAccentButton("Pilih model GGUF", onClick = onPickModelFile)
+                    ForgeTextButton("Inspect GGUF", onClick = { onRunAction(ForgeAction.INSPECT_GGUF) })
+                }
+                ForgeInfoCard(
+                    title = "Batas fungsi saat ini",
+                    subtitle = "Import/convert, quantize, split, dan bench belum diimplementasikan sebagai operasi native Android.",
+                    body = "Tombol tool tersebut tidak akan menampilkan hasil sukses palsu. Untuk menjalankan inference, muat model GGUF lalu gunakan panel AI Code.",
+                )
+            }
+            ForgeAiSection.SYSTEM -> NativeInfoPage(
+                title = "System",
+                subtitle = "Konfigurasi sistem aplikasi native",
+                body = "${state.deviceSummary}\n\nFile model disimpan di ruang privat aplikasi. Akses file kode dan model menggunakan Android Storage Access Framework.",
+            )
+            ForgeAiSection.TOKENS -> NativeInfoPage(
+                title = "Tokens",
+                subtitle = "Tokenizer belum tersambung ke tokenizer model",
+                body = "Belum ada encode/decode atau token-count native yang dapat divalidasi. Tidak ada hitungan token contoh yang akan ditampilkan sebagai hasil nyata.",
+            )
+            ForgeAiSection.ENGINES -> NativeInfoPage(
+                title = "Engines",
+                subtitle = "Integrasi inference Android",
+                body = "Source aplikasi menautkan wrapper JNI llama.cpp untuk ABI arm64-v8a. Build CI memverifikasi kompilasi APK; pemuatan model dan generasi tetap perlu diuji pada perangkat Android dengan model yang didukung.",
+            )
+            ForgeAiSection.MACHINE -> NativeInfoPage(
+                title = "Machine",
+                subtitle = "Informasi perangkat Android",
+                body = state.deviceSummary,
+            )
+            ForgeAiSection.TRAINING -> NativeInfoPage(
+                title = "Training",
+                subtitle = "Training model belum tersedia di perangkat ini",
+                body = "LoRA, QLoRA, full fine-tune, evaluasi, dan serving membutuhkan runtime/backend tambahan yang belum dibundel atau diuji sebagai fungsi Android native.",
+            )
+        }
+    }
+}
+
+@Composable
+private fun ForgeArchiveWorkspace(
+    state: ForgeUiState,
+    onOpenArchive: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier.background(ForgeBackground).padding(14.dp)) {
+        ForgeInfoCard(
+            title = "Archive / Bongkar",
+            subtitle = if (state.archiveFileName.isBlank()) "Belum ada ZIP dibuka" else state.archiveFileName,
+            body = "Pilih ZIP untuk membaca daftar entry secara lokal. Layar ini hanya menampilkan isi arsip; ekstraksi dan penyuntingan ZIP belum diaktifkan.",
+        )
+        ForgeAccentButton("Buka file ZIP", onClick = onOpenArchive)
+        Spacer(Modifier.height(10.dp))
+        if (state.archiveEntries.isEmpty()) {
+            Text("Entry arsip akan ditampilkan setelah file ZIP dipilih.", color = ForgeMuted, fontSize = 11.sp)
+        } else {
+            Text("${state.archiveEntries.size} entries", color = ForgeMuted, fontSize = 10.sp)
+            Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())) {
+                state.archiveEntries.forEach { entry ->
+                    Row(
+                        Modifier.fillMaxWidth().border(0.5.dp, ForgeBorder, RoundedCornerShape(5.dp)).padding(horizontal = 8.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(if (entry.isDirectory) "▸" else "•", color = ForgeOrange, fontSize = 12.sp)
+                        Text(entry.name, color = ForgeTextSecondary, fontSize = 10.sp, modifier = Modifier.weight(1f).padding(start = 7.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (!entry.isDirectory) Text(formatBytes(entry.sizeBytes), color = ForgeMutedSecondary, fontSize = 9.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NativeInfoPage(title: String, subtitle: String, body: String) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(14.dp)) {
+        ForgeInfoCard(title = title, subtitle = subtitle, body = body)
+    }
+}
+
+@Composable
+private fun ForgeInfoCard(title: String, subtitle: String, body: String) {
+    Column(
+        Modifier.fillMaxWidth().background(ForgeSurface, RoundedCornerShape(9.dp))
+            .border(0.5.dp, ForgeBorder, RoundedCornerShape(9.dp)).padding(13.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Text(title, color = ForgeText, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Text(subtitle, color = ForgeOrange, fontSize = 11.sp)
+        Text(body, color = ForgeMuted, fontSize = 11.sp, lineHeight = 16.sp)
+    }
+}
+
+private fun formatBytes(value: Long): String = when {
+    value < 1024 -> "$value B"
+    value < 1024 * 1024 -> "${value / 1024} KB"
+    else -> "${value / (1024 * 1024)} MB"
 }
 
 @Composable
@@ -386,7 +565,7 @@ private fun ForgeAssistantPanel(
     Column(modifier.background(ForgeSurface).border(width = 0.5.dp, color = ForgeBorder)) {
         Row(Modifier.fillMaxWidth().height(42.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("✦", color = ForgeOrange, fontSize = 16.sp, modifier = Modifier.padding(end = 8.dp))
-            Text(state.aiSection, color = ForgeText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text(state.aiSection.title, color = ForgeText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             Text("AI", color = ForgeMutedSecondary, fontSize = 10.sp)
         }
         Divider(color = ForgeBorder)

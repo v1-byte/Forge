@@ -20,15 +20,9 @@ fun isPushConfigured(context: Context): Boolean = try {
  * unavailable or enabling it fails.
  */
 fun enablePushNotifications(context: Context): Boolean {
-    val firebaseApp = try {
-        if (!isPushConfigured(context)) return false
-        FirebaseApp.getApps(context.applicationContext).firstOrNull() ?: return false
-    } catch (_: Exception) {
-        return false
-    }
-
     return try {
-        FirebaseMessaging.getInstance(firebaseApp).isAutoInitEnabled = true
+        if (!isPushConfigured(context)) return false
+        FirebaseMessaging.getInstance().isAutoInitEnabled = true
         true
     } catch (_: Exception) {
         false
@@ -41,23 +35,13 @@ fun enablePushNotifications(context: Context): Boolean {
  * [onResult] instead of being thrown to the caller.
  */
 fun getRegistrationToken(context: Context, onResult: (Result<String>) -> Unit) {
-    val firebaseApp = try {
-        if (!isPushConfigured(context)) {
-            onResult(Result.failure(IllegalStateException("Firebase belum dikonfigurasi.")))
-            return
-        }
-        FirebaseApp.getApps(context.applicationContext).firstOrNull()
-            ?: run {
-                onResult(Result.failure(IllegalStateException("Firebase belum dikonfigurasi.")))
-                return
-            }
-    } catch (error: Exception) {
-        onResult(Result.failure(error))
+    if (!isPushConfigured(context)) {
+        onResult(Result.failure(IllegalStateException("Firebase belum dikonfigurasi.")))
         return
     }
 
     try {
-        FirebaseMessaging.getInstance(firebaseApp).token
+        FirebaseMessaging.getInstance().token
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
                     val token = task.result

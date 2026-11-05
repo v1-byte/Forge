@@ -1,0 +1,74 @@
+name: Forge Native Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - native-android
+      - release/native-android-apk
+    paths:
+      - 'apps/forge-android/**'
+      - 'forge-engine/forge-inference/**'
+      - '.github/workflows/forge-native-android-apk.yml'
+  pull_request:
+    paths:
+      - 'apps/forge-android/**'
+      - 'forge-engine/forge-inference/**'
+      - '.github/workflows/forge-native-android-apk.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: forge-native-android-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    name: Test and build native APKs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: apps/forge-android/**/*.gradle*
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install Android SDK, NDK, and CMake
+        run: sdkmanager --install "platforms;android-36" "build-tools;36.0.0" "ndk;29.0.13113456" "cmake;3.31.6"
+
+      - name: Test and assemble debug and release variants
+        working-directory: apps/forge-android
+        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Verify APK outputs and calculate checksums
+        run: |
+          set -euo pipefail
+          test -s apps/forge-android/app/build/outputs/apk/debug/app-debug.apk
+          test -s apps/forge-android/app/build/outputs/apk/release/app-release-unsigned.apk
+          sha256sum \
+            apps/forge-android/app/build/outputs/apk/debug/app-debug.apk \
+            apps/forge-android/app/build/outputs/apk/release/app-release-unsigned.apk \
+            | tee apps/forge-android/apk-sha256.txt
+
+      - name: Upload installable debug APK and unsigned release build
+        uses: actions/upload-artifact@v6
+        with:
+          name: forge-native-android-apks-${{ github.sha }}
+          path: |
+            apps/forge-android/app/build/outputs/apk/debug/app-debug.apk
+            apps/forge-android/app/build/outputs/apk/release/app-release-unsigned.apk
+            apps/forge-android/apk-sha256.txt
+          if-no-files-found: error
+          retention-days: 30
