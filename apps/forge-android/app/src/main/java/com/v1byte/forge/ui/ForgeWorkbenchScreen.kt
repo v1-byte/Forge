@@ -297,7 +297,7 @@ private fun ForgeExplorer(state: ForgeUiState, onPickCodeFile: () -> Unit, onPic
                 Text("Pencarian file lokal", color = ForgeMutedSecondary, fontSize = 11.sp, modifier = Modifier.padding(top = 8.dp))
             }
             ForgeActivity.SOURCE_CONTROL -> {
-                Text(if (state.pushConfigured) "Remote configured" else "No remote configured", color = ForgeMuted, fontSize = 11.sp)
+                Text("Git remote belum dihubungkan", color = ForgeMuted, fontSize = 11.sp)
                 ForgeTextButton("Open code file", onClick = onPickCodeFile)
             }
             ForgeActivity.DEBUG -> Text("Gunakan action bar untuk menjalankan atau membangun melalui host app.", color = ForgeMuted, fontSize = 11.sp)
@@ -446,7 +446,7 @@ private fun ForgeStatusBar(state: ForgeUiState) {
     ) {
         Text("●", color = ForgeGreen, fontSize = 8.sp)
         Text("  ${state.statusText}", color = ForgeMuted, fontSize = 9.sp, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        if (state.pushConfigured) Text("Remote connected", color = ForgeMutedSecondary, fontSize = 9.sp)
+        if (state.pushConfigured) Text("FCM configured", color = ForgeMutedSecondary, fontSize = 9.sp)
         Text("  Forge Workbench", color = ForgeMutedSecondary, fontSize = 9.sp)
     }
 }

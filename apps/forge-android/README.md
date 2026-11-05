@@ -2,6 +2,8 @@
 
 Aplikasi ini adalah port Android native berbasis Kotlin dan Jetpack Compose untuk UI Forge Workbench yang disertakan pengguna. UI web bukan runtime aplikasi. Palet, struktur workbench, activity bar, editor, panel bawah, dan AI panel dipakai sebagai acuan visual.
 
+Spesifikasi tampilan, breakpoint, fungsi tiap komponen, token warna, dan batas fitur saat ini dijelaskan di [UI_SPEC.md](UI_SPEC.md).
+
 ## Komponen native
 
 - `app/`: UI Jetpack Compose, pemilihan file dengan Storage Access Framework, notifikasi Firebase, dan Google Play In-App Updates.
