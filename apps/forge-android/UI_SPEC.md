@@ -17,10 +17,11 @@ Dokumen ini membedakan **bagian yang sudah terhubung ke callback aplikasi** dari
 Urutan utama dari atas ke bawah:
 
 1. **Top bar (54 dp):** ikon huruf F, nama Forge/AI Studio, indikator model saat model aktif, tombol `Updates`, `Notify`, akses `AI Chat` pada layar yang tidak lebar, dan tombol aksen `Run`.
-2. **Workspace selector:** chip `Code`, `AI Engineering`, `Training`, dan `Archive`. Saat ini chip mengubah pilihan visual/state workspace; belum memuat empat aplikasi atau pipeline terpisah.
-3. **Area kerja:** activity bar, panel Explorer bila ruang cukup, editor, serta panel assistant sesuai breakpoint.
-4. **Bottom panel (154 dp):** tab `Problems`, `Output`, `Terminal`, `Inference`, dan `Trainer`.
-5. **Status bar (24 dp):** status operasi terakhir, label FCM bila Firebase terkonfigurasi, dan identitas Forge Workbench.
+2. **Workspace selector:** chip `Kode Biasa`, `AI Engineering`, dan `Archive / Bongkar`. Aksi training ada di bagian `Training` dalam AI Engineering; chip mengganti workspace, bukan memuat pipeline terpisah.
+3. **Catatan UI (selalu tampil):** label `PREVIEW UI` dan teks bahwa sebagian kontrol masih berupa tampilan serta belum semua engine native terhubung.
+4. **Area kerja:** activity bar, panel Explorer bila ruang cukup, editor, serta panel assistant sesuai breakpoint.
+5. **Bottom panel (154 dp):** tab `Problems`, `Output`, `Terminal`, `Inference`, dan `Trainer`.
+6. **Status bar (24 dp):** status operasi terakhir, label FCM bila Firebase terkonfigurasi, dan identitas Forge Workbench.
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
@@ -58,6 +59,7 @@ Workspace selector dan daftar action dapat digulir horizontal. Pada mode kompak,
 - `Updates` meminta pemeriksaan pembaruan Google Play. Jika update fleksibel sudah diunduh, banner menampilkan pesan dan tombol `Install` untuk melanjutkan alur Play.
 - `Notify` memulai permintaan izin notifikasi Android bila Firebase tersedia. Tanpa konfigurasi Firebase, status memberi tahu bahwa `google-services.json` belum dipasang.
 - `AI Chat` membuka assistant pada lebar di bawah 1100 dp.
+- Banner `PREVIEW UI` selalu menjelaskan bahwa sebagian kontrol masih hanya tampilan dan belum semua engine native terhubung.
 - `Run` meneruskan isi editor sebagai prompt ke model lokal bila model sudah dimuat. Tombol ini **tidak menjalankan kode editor**.
 - Nama model dan indikator hijau hanya tampil bila state aplikasi menyatakan model telah aktif.
 
@@ -148,7 +150,7 @@ Teks editor dan log memakai monospace; label antarmuka kecil memakai tipografi C
 - [x] Pilih/baca/simpan satu file teks melalui SAF.
 - [x] Pilih file GGUF, inspeksi metadata, dan jalur inference lokal llama.cpp.
 - [x] Kontrol UI update Google Play dan permission/penerima FCM dengan konfigurasi eksternal.
-- [ ] Screenshot dan pemeriksaan visual di perangkat Android nyata.
+- [ ] Screenshot dan pemeriksaan visual hasil render APK di perangkat Android nyata. Screenshot preview web tidak dianggap bukti render native.
 - [ ] Build APK berhasil; toolchain Android belum tersedia saat pemeriksaan terakhir.
 - [ ] Pohon file proyek, pencarian, Git, debugger, terminal shell, build/run source code.
 - [ ] Integrasi nyata compiler, trainer, quantization, API serving, dan tokenizer editor.

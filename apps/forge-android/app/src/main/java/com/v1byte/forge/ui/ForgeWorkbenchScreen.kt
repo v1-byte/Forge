@@ -3,8 +3,10 @@ package com.v1byte.forge.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -36,13 +38,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.v1byte.forge.R
 
 public enum class ForgeWorkspace(val title: String) {
     CODE("Kode Biasa"), AI_ENGINEERING("AI Engineering"), ARCHIVE("Archive / Bongkar")
@@ -265,6 +271,29 @@ private fun ForgeTopBar(
             ForgeWorkspace.values().forEach { workspace ->
                 ForgeChip(workspace.title, selected = workspace == state.workspace) { onWorkspaceSelected(workspace) }
             }
+        }
+        Row(
+            Modifier.fillMaxWidth().background(ForgePanel).padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                "PREVIEW UI",
+                color = ForgeOrange,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.border(0.5.dp, ForgeOrange.copy(alpha = 0.45f), RoundedCornerShape(5.dp))
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+            )
+            Text(
+                "Catatan: sebagian kontrol masih berupa tampilan; belum semua engine native terhubung.",
+                color = ForgeMuted,
+                fontSize = 9.sp,
+                lineHeight = 12.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
         }
         if (state.updateReady) {
             Row(
@@ -555,6 +584,16 @@ private fun ForgeEditorArea(
 }
 
 @Composable
+private fun ForgeCopilotLogo(height: Dp, modifier: Modifier = Modifier) {
+    Image(
+        painter = painterResource(R.drawable.copilot_logo),
+        contentDescription = "Logo Copilot",
+        contentScale = ContentScale.Fit,
+        modifier = modifier.height(height).aspectRatio(2f),
+    )
+}
+
+@Composable
 private fun ForgeAssistantPanel(
     state: ForgeUiState,
     chatDraft: String,
@@ -564,7 +603,7 @@ private fun ForgeAssistantPanel(
 ) {
     Column(modifier.background(ForgeSurface).border(width = 0.5.dp, color = ForgeBorder)) {
         Row(Modifier.fillMaxWidth().height(42.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("✦", color = ForgeOrange, fontSize = 16.sp, modifier = Modifier.padding(end = 8.dp))
+            ForgeCopilotLogo(height = 18.dp, modifier = Modifier.padding(end = 8.dp))
             Text(state.aiSection.title, color = ForgeText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             Text("AI", color = ForgeMutedSecondary, fontSize = 10.sp)
         }
@@ -578,7 +617,10 @@ private fun ForgeAssistantPanel(
             }
             state.chatMessages.forEach { message ->
                 Column(Modifier.fillMaxWidth().background(if (message.role.equals("user", true)) ForgePanelRaised else ForgePanel, RoundedCornerShape(8.dp)).padding(9.dp)) {
-                    Text(message.role.replaceFirstChar { it.uppercase() }, color = if (message.role.equals("user", true)) ForgeOrange else ForgeMuted, fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (!message.role.equals("user", true)) ForgeCopilotLogo(height = 11.dp, modifier = Modifier.padding(end = 5.dp))
+                        Text(message.role.replaceFirstChar { it.uppercase() }, color = if (message.role.equals("user", true)) ForgeOrange else ForgeMuted, fontSize = 9.sp, fontWeight = FontWeight.SemiBold)
+                    }
                     Text(message.content, color = ForgeTextSecondary, fontSize = 11.sp, lineHeight = 16.sp, modifier = Modifier.padding(top = 4.dp))
                 }
             }

@@ -4,6 +4,14 @@ Aplikasi ini adalah port Android native berbasis Kotlin dan Jetpack Compose untu
 
 Spesifikasi tampilan, breakpoint, fungsi tiap komponen, token warna, dan batas fitur saat ini dijelaskan di [UI_SPEC.md](UI_SPEC.md).
 
+Top bar APK selalu menampilkan label **PREVIEW UI** beserta catatan bahwa sebagian kontrol masih berupa tampilan dan belum semua engine native terhubung. Logo Copilot pada panel assistant memakai aset terbaru yang diberikan pengguna. Label tersebut menjelaskan status fitur; aplikasi tetap native Jetpack Compose dan tidak memuat UI lewat WebView.
+
+Folder `preview/` berisi pratinjau browser dari UI terbaru untuk melihat tata letak tanpa memasang APK. Jalankan `python3 -m http.server 4173 --directory preview` dari root repository, lalu buka `http://localhost:4173`. Karena ini pratinjau statis, fitur yang memerlukan gateway/native runtime mungkin tidak aktif. APK native dibangun dari source Kotlin/Compose di `app/`; jangan menyamakan screenshot preview browser dengan screenshot APK yang sedang berjalan.
+
+Screenshot berikut adalah **preview UI** pada ukuran ponsel; ini bukan screenshot dari APK yang terpasang. [Lihat preview desktop](screenshots/ui-preview-desktop.png).
+
+![Preview UI mobile — pratinjau browser, bukan APK yang sedang berjalan](screenshots/ui-preview-mobile.png)
+
 ## Komponen native
 
 - `app/`: UI Jetpack Compose, pemilihan file dengan Storage Access Framework, notifikasi Firebase, dan Google Play In-App Updates.
