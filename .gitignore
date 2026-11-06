@@ -3,3 +3,6 @@
 /forge-workbench/.env
 /forge-workbench/.env.*
 !/forge-workbench/.env.native.example
+
+# Native Qt build output
+/forge-workbench/native-qt6/build*/

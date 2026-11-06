@@ -119,3 +119,9 @@ Menu **File** di topbar (juga di HP) dan baris tombol di atas Explorer sekarang 
 - **Bongkar ZIP** — buka isi ZIP tanpa mengekstrak, edit, Save ke dalam ZIP, lalu **Unduh ZIP** hasil edit atau **Ekstrak** ke Explorer.
 
 Workspace lokal bekerja tanpa gateway. Library JSZip dimuat dari CDN, jadi perlu internet sekali (atau simpan jszip.min.js lokal untuk APK offline). Unduhan memakai tautan `<a download>`; di WebView Android perlu `DownloadListener`/`WebChromeClient.onShowFileChooser` agar pemilih file dan unduhan berjalan.
+
+## Native Qt 6 / C++ desktop dan Android
+
+Port native tersedia di [`native-qt6/`](native-qt6/). Port ini menambahkan target Qt 6/QML untuk UI dan C++17 untuk backend tanpa menghapus UI web React atau gateway Node.js yang sudah ada. Dengan demikian, tampilan dan workflow lama tetap tersedia, sementara aplikasi desktop/Android dapat dibangun dari source native yang sama.
+
+Build dan arsitektur dijelaskan di [`native-qt6/README_CPP_QT6_ID.md`](native-qt6/README_CPP_QT6_ID.md). Fitur native yang tersedia meliputi workspace explorer, baca/tulis file, pencarian, status engine, tokenizer Unicode baseline, job storage, dan safe/native execution toggle. Adapter inference, compiler, trainer, GGUF, ZIP, dan Git lanjutan tetap menggunakan engine/adapters yang dikonfigurasi deployment.

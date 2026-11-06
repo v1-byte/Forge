@@ -30,3 +30,5 @@ Buka `http://localhost:8787`. Detail penggunaan ada di [`forge-workbench/README.
 Versi ini menghapus tombol quick-action di area layar kosong, menambahkan tema Dark/Light/System, syntax highlighting lokal dengan deteksi bahasa, dan pengelola pack bahasa. Plugin DLL/native tidak dieksekusi oleh browser.
 
 Lisensi dan notice pihak ketiga disimpan terpusat di `LICENSES/` untuk memenuhi kewajiban redistribusi; tidak ada UI, tutorial, README upstream, contoh aplikasi, atau test upstream di dalam payload engine.
+
+Port native Qt 6/C++ untuk desktop dan Android tersedia di [`forge-workbench/native-qt6/`](forge-workbench/native-qt6/); UI web lama dan gateway tetap dipertahankan.
