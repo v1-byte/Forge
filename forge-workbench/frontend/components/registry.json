@@ -1,0 +1,5 @@
+{
+  "components": ["FileExplorer", "CodeEditor", "ModelInspector", "ZipBrowser", "TrainingPanel", "InferencePanel", "Terminal", "CommandPalette"],
+  "shell": "ForgeWorkbenchShell",
+  "entry": "../index.html"
+}

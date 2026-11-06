@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"ForgeWorkspace","type":"object","required":["mode","root"],"properties":{"mode":{"enum":["code","model","archive","training","inference"]},"root":{"type":"string"},"activeFile":{"type":"string"},"engine":{"type":"string"}}}

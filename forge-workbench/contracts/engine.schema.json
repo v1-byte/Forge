@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"ForgeEngine","type":"object","required":["id","path","role"],"properties":{"id":{"type":"string"},"path":{"type":"string"},"role":{"type":"string"},"modes":{"type":"array","items":{"type":"string"}}}}

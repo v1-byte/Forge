@@ -1,0 +1,1 @@
+{"engine":"forge-litgpt","path":"../../forge-engine/forge-litgpt","actions":["pretrain","finetune","generate","evaluate","convert","serve"]}

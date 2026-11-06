@@ -1,0 +1,1 @@
+{"id":"inference","description":"Local inference embedding token streaming KV cache and serving workspace","engines":["forge-inference"]}

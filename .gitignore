@@ -1,0 +1,5 @@
+# Forge Workbench local runtime files and secrets
+/forge-workbench/node_modules/
+/forge-workbench/.env
+/forge-workbench/.env.*
+!/forge-workbench/.env.native.example

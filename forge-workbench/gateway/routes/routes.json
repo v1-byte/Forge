@@ -1,0 +1,1 @@
+{"routes":[{"method":"GET","path":"/health","purpose":"gateway health"},{"method":"GET","path":"/api/engine-map","purpose":"engine registry"},{"method":"GET","path":"/api/workbench-manifest","purpose":"workspace registry"}]}

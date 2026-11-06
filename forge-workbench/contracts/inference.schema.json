@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"ForgeInferenceRequest","type":"object","required":["model","prompt"],"properties":{"model":{"type":"string"},"prompt":{"type":"string"},"maxTokens":{"type":"integer"},"temperature":{"type":"number"},"stream":{"type":"boolean"}}}

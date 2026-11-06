@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"ForgeTrainingJob","type":"object","required":["engine","recipe","model"],"properties":{"engine":{"enum":["forge-trainer","forge-litgpt"]},"recipe":{"enum":["lora","qlora","full-finetune"]},"model":{"type":"string"},"dataset":{"type":"string"},"output":{"type":"string"}}}

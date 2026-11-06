@@ -1,0 +1,1 @@
+{"engine":"forge-trainer","path":"../../forge-engine/forge-trainer","actions":["lora","qlora","full-finetune","distributed","checkpoint","evaluate"]}

@@ -1,0 +1,1 @@
+{"id":"training","description":"LoRA QLoRA full fine-tune dataset checkpoint and evaluation workspace","engines":["forge-trainer,forge-litgpt"]}

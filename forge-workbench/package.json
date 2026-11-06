@@ -1,0 +1,19 @@
+{
+  "name": "forge-workbench",
+  "version": "1.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node gateway/server/index.js",
+    "dev": "node gateway/server/index.js",
+    "check": "node --check gateway/server/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "workbench": {
+    "frontend": "frontend/index.html",
+    "engineMap": "config/engine-map.json",
+    "manifest": "config/workbench-manifest.json"
+  }
+}
