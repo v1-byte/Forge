@@ -34,7 +34,11 @@ Gunakan Qt Creator dengan kit Android Qt 6, atau CMake dengan toolchain Android 
 - penyimpanan job lokal dan pembatalan job;
 - toggle safe mode/native execution.
 
-UI QML mempertahankan struktur Forge lama: top bar, activity rail, Explorer, editor tab, status bar, AI Engine, Copilot, Search, dan Archive.
+UI QML mempertahankan struktur Forge lama: top bar, activity rail, Explorer, editor tab, status bar, AI Engine, Copilot, Search, Git, Run & Debug, bottom terminal/output/problems/debug console, theme picker, command palette, dan Archive. `qml/Main.qml` harus diperlakukan sebagai port visual dari `../frontend/index.html`; tombol yang belum memiliki adapter native tetap ditampilkan dan memberi status yang jelas, bukan dihapus.
+
+## Status APK
+
+APK yang dibangun dari branch Android Compose/Kotlin lama bukan release dari port ini. Release Qt 6/C++ hanya boleh dibuat setelah dibangun menggunakan Qt for Android, Android SDK/NDK, dan CMake terhadap direktori `native-qt6/`. Jangan mengganti APK Qt dengan artifact Kotlin lama karena tampilan dan runtime-nya berbeda.
 
 ## Catatan port lanjutan
 
