@@ -7,12 +7,18 @@
 #include <QHash>
 #include <QJsonObject>
 #include <QString>
+#include <QNetworkAccessManager>
 
 class ForgeBackend final : public QObject {
     Q_OBJECT
     Q_PROPERTY(QString workspaceRoot READ workspaceRoot WRITE setWorkspaceRoot NOTIFY workspaceRootChanged)
     Q_PROPERTY(QString activeFile READ activeFile NOTIFY activeFileChanged)
     Q_PROPERTY(bool nativeExecutionEnabled READ nativeExecutionEnabled NOTIFY nativeExecutionEnabledChanged)
+    Q_PROPERTY(QString appVersion READ appVersion CONSTANT)
+    Q_PROPERTY(QString updateStatus READ updateStatus NOTIFY updateStatusChanged)
+    Q_PROPERTY(QString latestVersion READ latestVersion NOTIFY latestVersionChanged)
+    Q_PROPERTY(int updateProgress READ updateProgress NOTIFY updateProgressChanged)
+    Q_PROPERTY(bool updateAvailable READ updateAvailable NOTIFY updateAvailableChanged)
 
 public:
     explicit ForgeBackend(QObject *parent = nullptr);
@@ -21,6 +27,11 @@ public:
     void setWorkspaceRoot(const QString &root);
     QString activeFile() const;
     bool nativeExecutionEnabled() const;
+    QString appVersion() const;
+    QString updateStatus() const;
+    QString latestVersion() const;
+    int updateProgress() const;
+    bool updateAvailable() const;
 
     Q_INVOKABLE QVariantList listFiles(const QString &relativePath = QString()) const;
     Q_INVOKABLE QString readFile(const QString &relativePath);
@@ -38,6 +49,8 @@ public:
     Q_INVOKABLE void setNativeExecutionEnabled(bool enabled);
     Q_INVOKABLE void openFile(const QString &relativePath);
     Q_INVOKABLE void refresh();
+    Q_INVOKABLE void checkForUpdates(bool manual = true);
+    Q_INVOKABLE void downloadAndInstallUpdate();
 
 signals:
     void workspaceRootChanged();
@@ -47,6 +60,10 @@ signals:
     void fileOpened(const QString &path, const QString &content);
     void operationMessage(const QString &message, bool error);
     void jobChanged(const QString &id);
+    void updateStatusChanged();
+    void latestVersionChanged();
+    void updateProgressChanged();
+    void updateAvailableChanged();
 
 private:
     QString safePath(const QString &relativePath) const;
@@ -55,9 +72,19 @@ private:
     void saveJobs() const;
     void loadJobs();
     void appendJobLog(QVariantMap &job, const QString &line);
+    void setUpdateStatus(const QString &status);
+    void handleReleaseResponse(const QByteArray &data, bool manual);
+    void installDownloadedApk(const QString &path);
 
     QString m_workspaceRoot;
     QString m_activeFile;
     bool m_nativeExecutionEnabled = false;
     QHash<QString, QVariantMap> m_jobs;
+    QNetworkAccessManager m_network;
+    QString m_updateStatus = QStringLiteral("Belum diperiksa");
+    QString m_latestVersion;
+    QString m_updateApkUrl;
+    QString m_updateSha256;
+    int m_updateProgress = 0;
+    bool m_updateAvailable = false;
 };

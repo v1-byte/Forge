@@ -9,7 +9,7 @@ int main(int argc, char *argv[]) {
     QGuiApplication app(argc, argv);
     app.setApplicationName("Forge Workbench");
     app.setOrganizationName("Forge");
-    app.setApplicationVersion("2.0.0-native");
+    app.setApplicationVersion("2.1.0");
     QQuickStyle::setStyle("Basic");
 
     ForgeBackend backend;

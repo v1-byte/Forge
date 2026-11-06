@@ -1,0 +1,60 @@
+name: Android release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt for Android
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          host: 'linux'
+          target: 'android'
+          arch: 'android_arm64_v8a'
+          cache: true
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Configure Android build
+        working-directory: forge-workbench/native-qt6
+        run: |
+          qt-cmake -S . -B build -DQT_ANDROID_ABIS=arm64-v8a
+
+      - name: Build APK
+        working-directory: forge-workbench/native-qt6
+        run: cmake --build build --parallel 2
+
+      - name: Locate and checksum APK
+        id: artifact
+        working-directory: forge-workbench/native-qt6
+        run: |
+          APK=$(find build -type f -name '*.apk' | head -n 1)
+          test -n "$APK"
+          cp "$APK" ForgeWorkbench-${GITHUB_REF_NAME#v}.apk
+          sha256sum ForgeWorkbench-${GITHUB_REF_NAME#v}.apk | tee ForgeWorkbench-${GITHUB_REF_NAME#v}.apk.sha256
+          echo "apk=ForgeWorkbench-${GITHUB_REF_NAME#v}.apk" >> "$GITHUB_OUTPUT"
+          echo "sha=ForgeWorkbench-${GITHUB_REF_NAME#v}.apk.sha256" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            forge-workbench/native-qt6/ForgeWorkbench-*.apk
+            forge-workbench/native-qt6/ForgeWorkbench-*.apk.sha256

@@ -13,6 +13,15 @@
 #include <QSysInfo>
 #include <QThread>
 #include <QCryptographicHash>
+#include <QCoreApplication>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QVersionNumber>
+#include <QUrl>
+#ifdef Q_OS_ANDROID
+#include <QJniObject>
+#include <QNativeInterface>
+#endif
 
 namespace {
 const QStringList codeExtensions = {"c", "cc", "cpp", "h", "hpp", "py", "js", "ts", "tsx", "jsx", "java", "kt", "rs", "go", "swift", "sh", "json", "yaml", "yml", "toml", "xml", "cmake", "md"};
@@ -21,6 +30,12 @@ const QStringList ignoredDirectories = {".git", "node_modules", "__pycache__", "
 
 QString isoNow() { return QDateTime::currentDateTimeUtc().toString(Qt::ISODate); }
 QString keyFor(const QString &type) { return QString("FORGE_%1_CMD").arg(type.toUpper().replace('-', '_')); }
+QString comparableVersion(QString value) {
+    value.remove(QRegularExpression("^[vV]"));
+    const int suffix = value.indexOf(QRegularExpression("[^0-9.]"));
+    if (suffix >= 0) value.truncate(suffix);
+    return value;
+}
 }
 
 ForgeBackend::ForgeBackend(QObject *parent) : QObject(parent) {
@@ -30,6 +45,11 @@ ForgeBackend::ForgeBackend(QObject *parent) : QObject(parent) {
         : QDir::cleanPath(configured);
     QDir().mkpath(m_workspaceRoot);
     loadJobs();
+    QTimer::singleShot(3000, this, [this]() { checkForUpdates(false); });
+    auto *updateTimer = new QTimer(this);
+    updateTimer->setInterval(6 * 60 * 60 * 1000);
+    connect(updateTimer, &QTimer::timeout, this, [this]() { checkForUpdates(false); });
+    updateTimer->start();
 }
 
 QString ForgeBackend::workspaceRoot() const { return m_workspaceRoot; }
@@ -48,6 +68,107 @@ void ForgeBackend::setWorkspaceRoot(const QString &root) {
 
 QString ForgeBackend::activeFile() const { return m_activeFile; }
 bool ForgeBackend::nativeExecutionEnabled() const { return m_nativeExecutionEnabled; }
+QString ForgeBackend::appVersion() const { return QCoreApplication::applicationVersion(); }
+QString ForgeBackend::updateStatus() const { return m_updateStatus; }
+QString ForgeBackend::latestVersion() const { return m_latestVersion; }
+int ForgeBackend::updateProgress() const { return m_updateProgress; }
+bool ForgeBackend::updateAvailable() const { return m_updateAvailable; }
+
+void ForgeBackend::setUpdateStatus(const QString &status) {
+    if (m_updateStatus == status) return;
+    m_updateStatus = status;
+    emit updateStatusChanged();
+}
+
+void ForgeBackend::handleReleaseResponse(const QByteArray &data, bool manual) {
+    QJsonParseError error;
+    const QJsonDocument document = QJsonDocument::fromJson(data, &error);
+    if (error.error != QJsonParseError::NoError || !document.isObject()) {
+        setUpdateStatus("Metadata update tidak valid");
+        if (manual) emit operationMessage(m_updateStatus, true);
+        return;
+    }
+    const QJsonObject release = document.object();
+    const QString tag = release.value("tag_name").toString();
+    m_latestVersion = tag;
+    emit latestVersionChanged();
+    m_updateApkUrl.clear();
+    m_updateSha256.clear();
+    for (const QJsonValue &value : release.value("assets").toArray()) {
+        const QJsonObject asset = value.toObject();
+        const QString name = asset.value("name").toString();
+        const QString url = asset.value("browser_download_url").toString();
+        if (name.endsWith(".apk", Qt::CaseInsensitive) && m_updateApkUrl.isEmpty()) m_updateApkUrl = url;
+        if (name.endsWith(".sha256", Qt::CaseInsensitive) && m_updateSha256.isEmpty()) m_updateSha256 = url;
+    }
+    const QVersionNumber current = QVersionNumber::fromString(comparableVersion(appVersion()));
+    const QVersionNumber latest = QVersionNumber::fromString(comparableVersion(tag));
+    const bool available = !tag.isEmpty() && QVersionNumber::compare(latest, current) > 0 && !m_updateApkUrl.isEmpty();
+    if (m_updateAvailable != available) { m_updateAvailable = available; emit updateAvailableChanged(); }
+    setUpdateStatus(available ? QString("Update tersedia: %1").arg(tag) : QString("Sudah versi terbaru (%1)").arg(appVersion()));
+    if (manual) emit operationMessage(available ? QString("Update %1 tersedia").arg(tag) : "Forge sudah versi terbaru", false);
+}
+
+void ForgeBackend::checkForUpdates(bool manual) {
+    setUpdateStatus("Memeriksa update…");
+    QNetworkRequest request(QUrl("https://api.github.com/repos/v1-byte/Forge/releases/latest"));
+    request.setHeader(QNetworkRequest::UserAgentHeader, "Forge-Workbench-Updater/1.0");
+    request.setRawHeader("Accept", "application/vnd.github+json");
+    QNetworkReply *reply = m_network.get(request);
+    connect(reply, &QNetworkReply::finished, this, [this, reply, manual]() {
+        const QByteArray data = reply->readAll();
+        if (reply->error() != QNetworkReply::NoError) {
+            setUpdateStatus(QString("Gagal memeriksa update: %1").arg(reply->errorString()));
+            if (manual) emit operationMessage(m_updateStatus, true);
+        } else handleReleaseResponse(data, manual);
+        reply->deleteLater();
+    });
+}
+
+void ForgeBackend::downloadAndInstallUpdate() {
+    if (!m_updateAvailable || m_updateApkUrl.isEmpty()) { emit operationMessage("Belum ada update APK yang valid", true); return; }
+#ifndef Q_OS_ANDROID
+    emit operationMessage("Installer APK hanya tersedia pada Android", true);
+    return;
+#else
+    const QString cache = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+    QDir().mkpath(cache);
+    const QString apkPath = QDir(cache).filePath("forge-update.apk");
+    QFile *file = new QFile(apkPath, this);
+    if (!file->open(QIODevice::WriteOnly | QIODevice::Truncate)) { file->deleteLater(); emit operationMessage("Tidak dapat menyimpan APK update", true); return; }
+    m_updateProgress = 0; emit updateProgressChanged(); setUpdateStatus("Mengunduh APK update…");
+    QNetworkRequest request(QUrl(m_updateApkUrl));
+    request.setHeader(QNetworkRequest::UserAgentHeader, "Forge-Workbench-Updater/1.0");
+    QNetworkReply *reply = m_network.get(request);
+    connect(reply, &QNetworkReply::readyRead, this, [reply, file]() { file->write(reply->readAll()); });
+    connect(reply, &QNetworkReply::downloadProgress, this, [this](qint64 received, qint64 total) {
+        const int progress = total > 0 ? static_cast<int>((received * 100) / total) : 0;
+        if (m_updateProgress != progress) { m_updateProgress = progress; emit updateProgressChanged(); }
+    });
+    connect(reply, &QNetworkReply::finished, this, [this, reply, file, apkPath]() {
+        file->write(reply->readAll()); file->flush(); file->close();
+        if (reply->error() != QNetworkReply::NoError) { setUpdateStatus("Download APK gagal"); emit operationMessage(reply->errorString(), true); file->remove(); file->deleteLater(); reply->deleteLater(); return; }
+        QFile verify(apkPath); const bool opened = verify.open(QIODevice::ReadOnly);
+        const QByteArray digest = opened ? QCryptographicHash::hash(verify.readAll(), QCryptographicHash::Sha256).toHex() : QByteArray();
+        const QByteArray expected = m_updateSha256.trimmed().split(' ').value(0).toLower().toLatin1();
+        if (!opened || (!expected.isEmpty() && digest != expected)) {
+            setUpdateStatus("Checksum APK tidak cocok"); emit operationMessage("Update dibatalkan: SHA-256 APK tidak cocok", true); file->remove(); file->deleteLater(); reply->deleteLater(); return;
+        }
+        setUpdateStatus("APK siap dipasang; konfirmasi installer Android"); installDownloadedApk(apkPath);
+        file->deleteLater(); reply->deleteLater();
+    });
+#endif
+}
+
+void ForgeBackend::installDownloadedApk(const QString &path) {
+#ifdef Q_OS_ANDROID
+    const QJniObject activity = QNativeInterface::QAndroidApplication::context();
+    const QJniObject javaPath = QJniObject::fromString(path);
+    QJniObject::callStaticMethod<void>("org/forge/workbench/UpdateInstaller", "install", "(Landroid/content/Context;Ljava/lang/String;)V", activity.object(), javaPath.object());
+#else
+    Q_UNUSED(path);
+#endif
+}
 
 QString ForgeBackend::safePath(const QString &relativePath) const {
     const QString base = QDir(m_workspaceRoot).absolutePath();
