@@ -136,7 +136,7 @@ void ForgeBackend::downloadAndInstallUpdate() {
     QFile *file = new QFile(apkPath, this);
     if (!file->open(QIODevice::WriteOnly | QIODevice::Truncate)) { file->deleteLater(); emit operationMessage("Tidak dapat menyimpan APK update", true); return; }
     m_updateProgress = 0; emit updateProgressChanged(); setUpdateStatus("Mengunduh APK update…");
-    QNetworkRequest request(QUrl(m_updateApkUrl));
+    QNetworkRequest request{QUrl(m_updateApkUrl)};
     request.setHeader(QNetworkRequest::UserAgentHeader, "Forge-Workbench-Updater/1.0");
     QNetworkReply *reply = m_network.get(request);
     connect(reply, &QNetworkReply::readyRead, this, [reply, file]() { file->write(reply->readAll()); });
@@ -182,7 +182,8 @@ QVariantMap ForgeBackend::classify(const QString &path) const {
     const QString suffix = QFileInfo(lower).suffix();
     const bool model = modelExtensions.contains(suffix);
     const bool token = lower.contains("token") || lower.contains("vocab") || lower.contains("sentencepiece");
-    const bool system = {"json", "yaml", "yml", "toml", "xml"}.contains(suffix) || lower.contains("config") || lower.contains("manifest");
+    const QStringList systemExtensions = {"json", "yaml", "yml", "toml", "xml"};
+    const bool system = systemExtensions.contains(suffix) || lower.contains("config") || lower.contains("manifest");
     QVariantMap result;
     result["kind"] = token ? "token" : model ? "binary" : codeExtensions.contains(suffix) ? "code" : system ? "config" : "file";
     result["group"] = model || token ? "machine" : system ? "system" : "file";
