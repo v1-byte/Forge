@@ -27,9 +27,9 @@ Jangan commit keystore atau password. Kehilangan kunci/sertifikat berbeda akan m
 
 ## Prosedur rilis
 
-1. Naikkan `project(... VERSION ...)` di `CMakeLists.txt`, misalnya `2.1.5`. Versi runtime aplikasi diambil dari definisi compile-time CMake.
+1. Naikkan `project(... VERSION ...)` di `CMakeLists.txt`, misalnya `2.1.6`. Versi runtime aplikasi diambil dari definisi compile-time CMake.
 2. Siapkan catatan rilis yang hanya menjanjikan fitur yang sudah diuji dan memuat known issues.
-3. Buat/push tag (misalnya `v2.1.5`) yang cocok persis dengan versi CMake. Workflow memeriksa tag, membangun arm64-v8a, menandatangani APK, memverifikasi signature, lalu menerbitkan APK dan checksum.
+3. Buat/push tag (misalnya `v2.1.6`) yang cocok persis dengan versi CMake. Workflow memeriksa tag, membangun arm64-v8a, menandatangani APK, memverifikasi signature dan package/version APK, lalu menerbitkan APK dan checksum.
 4. Periksa log workflow, fingerprint sertifikat, checksum, dan install/update di perangkat uji sebelum mengumumkan rilis. Status workflow berhasil bukan bukti bahwa semua fitur lolos uji perangkat.
 
 Workflow `workflow_dispatch` pada branch sengaja ditolak; jalankan pada tag. Perlakukan tag dan release yang sudah diumumkan sebagai immutable.

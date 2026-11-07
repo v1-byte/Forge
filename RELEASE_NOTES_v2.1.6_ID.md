@@ -1,18 +1,18 @@
-# Forge Workbench Android v2.1.5 — migrasi package aplikasi
+# Forge Workbench Android v2.1.6 — migrasi package aplikasi
 
 ## Penting untuk pengguna v2.1.2
 
-Rilis ini memakai package aplikasi baru `com.v1byte.forgeworkbench` dan sertifikat signing rilis permanen. APK v2.1.2 memakai package `org.qtproject.example.ForgeWorkbench` dan sertifikat Android Debug. Karena package dan signer berbeda, Android tidak bisa memperbarui v2.1.2 secara langsung; instalasi v2.1.5 akan muncul sebagai aplikasi terpisah.
+Rilis ini memakai package aplikasi baru `com.v1byte.forgeworkbench` dan sertifikat signing rilis permanen. APK v2.1.2 memakai package `org.qtproject.example.ForgeWorkbench` dan sertifikat Android Debug. Karena package dan signer berbeda, Android tidak bisa memperbarui v2.1.2 secara langsung; instalasi v2.1.6 akan muncul sebagai aplikasi terpisah.
 
 Sebelum menghapus aplikasi lama, ekspor atau salin workspace dan model yang ingin dipertahankan. Uji bahwa data dapat dipulihkan. Setelah memastikan backup, pengguna dapat menghapus versi lama secara manual bila tidak lagi diperlukan. Jangan menghapus aplikasi lama sebelum memastikan file penting tersimpan.
 
 ## Perubahan
 
 - Auto-update hanya menerima release stabil dengan versi dan nama APK/checksum yang cocok.
-- APK diunduh setelah persetujuan pengguna; checksum SHA-256 diambil dari release dan harus cocok sebelum installer Android dibuka.
+- APK diunduh setelah persetujuan pengguna; checksum SHA-256 dari GitHub Release harus cocok sebelum installer Android dibuka.
 - UI menampilkan versi, status verifikasi, progres download, dan konfirmasi installer Android.
 - Jika Android belum mengizinkan pemasangan dari Forge, aplikasi membuka pengaturan izin yang relevan.
-- Workflow memeriksa kecocokan tag/versi, menandatangani dengan release keystore tetap, memverifikasi signature, lalu menerbitkan APK dan checksum.
+- Workflow memeriksa kecocokan tag/versi, signature release, package ID, dan versionName sebelum menerbitkan APK dan checksum.
 - Nama aplikasi dan launcher icon resmi ditambahkan.
 
 ## Batasan yang diketahui
