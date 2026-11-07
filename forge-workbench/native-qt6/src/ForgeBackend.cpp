@@ -20,7 +20,6 @@
 #include <QUrl>
 #ifdef Q_OS_ANDROID
 #include <QJniObject>
-#include <QNativeInterface>
 #endif
 
 namespace {
