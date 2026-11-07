@@ -10,6 +10,10 @@ Forge Workbench sudah menyediakan Explorer/workspace lokal, tab edit, penyimpana
 
 Perubahan dalam audit ini melengkapi workflow editor dasar di browser: Quick Open, Find/Replace dalam file aktif, Go to Line, navigasi tab, indentasi dan auto-pair dasar, keyboard-operable command palette, preferensi bahasa/syntax tersimpan lokal, dan indikator line/column dinamis. Status Problems/Outline dan keterangan Run/Git diperjelas agar tidak mengesankan fitur yang belum terhubung sedang aktif.
 
+## Update Android Kotlin (7 November 2026)
+
+Setelah audit ini, dibuat proyek terpisah `forge-android/`: shell editor native Kotlin, pemilihan/penyalinan GGUF, serta bridge JNI untuk C API `forge-inference` CPU arm64. Ini proof-of-concept yang harus lulus build NDK dan uji perangkat sebelum dianggap siap; tidak mengubah atau menghapus frontend HTML, dan tidak mengintegrasikan engine Python/Node lain. Rincian build, penggunaan, dan gap editor ada di [`forge-android/README_ID.md`](../forge-android/README_ID.md).
+
 ## Sudah tersedia
 
 - Explorer lokal: membuka file/folder, membuat/rename/menghapus file lokal, impor kode/ZIP, ekspor workspace, dan penyimpanan IndexedDB.

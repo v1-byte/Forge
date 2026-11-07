@@ -1,0 +1,37 @@
+name: Forge Android Native
+
+on:
+  push:
+    paths:
+      - "forge-android/**"
+      - "forge-engine/forge-inference/**"
+      - ".github/workflows/forge-android.yml"
+  pull_request:
+    paths:
+      - "forge-android/**"
+      - "forge-engine/forge-inference/**"
+      - ".github/workflows/forge-android.yml"
+  workflow_dispatch:
+
+jobs:
+  build-arm64-debug:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Forge
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android build packages
+        run: sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018" "cmake;3.22.1"
+
+      - name: Build Kotlin app and llama.cpp JNI for arm64-v8a
+        working-directory: forge-android
+        run: ./gradlew --no-daemon :app:assembleDebug

@@ -50,6 +50,8 @@ Plugin `.dll`/native tidak berjalan langsung di browser. Plugin eksternal memerl
 
 Audit perbandingan fitur, kemampuan yang ditambahkan, dan gap VS Code yang masih terbuka ada di [`EDITOR_FEATURE_AUDIT_ID.md`](EDITOR_FEATURE_AUDIT_ID.md).
 
+Port Android Kotlin native awal yang memanggil `forge-inference` langsung melalui JNI berada di [`../forge-android/README_ID.md`](../forge-android/README_ID.md); UI Workbench HTML ini belum seluruhnya dipindahkan.
+
 ## Backend API dan status implementasi
 
 Gateway sekarang menyediakan baseline operasional untuk Workbench:

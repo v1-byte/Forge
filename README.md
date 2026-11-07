@@ -34,3 +34,5 @@ Versi ini menghapus tombol quick-action di area layar kosong, menambahkan tema D
 Lisensi dan notice pihak ketiga disimpan terpusat di `LICENSES/` untuk memenuhi kewajiban redistribusi; tidak ada UI, tutorial, README upstream, contoh aplikasi, atau test upstream di dalam payload engine.
 
 Port native Qt 6/C++ untuk desktop dan Android tersedia di [`forge-workbench/native-qt6/`](forge-workbench/native-qt6/); UI web lama dan gateway tetap dipertahankan.
+
+Proof-of-concept aplikasi Android Kotlin native dengan JNI langsung ke `forge-inference` (llama.cpp/GGML CPU, arm64-v8a) tersedia di [`forge-android/`](forge-android/README_ID.md). Ini slice awal yang terpisah, bukan konversi penuh UI Workbench atau integrasi semua engine; ikuti README-nya untuk build dan batas dukungan.
