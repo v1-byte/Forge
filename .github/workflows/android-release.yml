@@ -19,7 +19,7 @@ jobs:
       - name: Install Qt for Android
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.8.3'
+          version: '6.7.3'
           host: 'linux'
           target: 'android'
           arch: 'android_arm64_v8a'
