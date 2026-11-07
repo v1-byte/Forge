@@ -1,8 +1,8 @@
-# Forge Workbench Android v2.1.4 — migrasi package aplikasi
+# Forge Workbench Android v2.1.5 — migrasi package aplikasi
 
 ## Penting untuk pengguna v2.1.2
 
-Rilis ini memakai package aplikasi baru `com.v1byte.forgeworkbench` dan sertifikat signing rilis permanen. APK v2.1.2 memakai package `org.qtproject.example.ForgeWorkbench` dan sertifikat Android Debug. Karena package dan signer berbeda, Android tidak bisa memperbarui v2.1.2 secara langsung; instalasi v2.1.4 akan muncul sebagai aplikasi terpisah.
+Rilis ini memakai package aplikasi baru `com.v1byte.forgeworkbench` dan sertifikat signing rilis permanen. APK v2.1.2 memakai package `org.qtproject.example.ForgeWorkbench` dan sertifikat Android Debug. Karena package dan signer berbeda, Android tidak bisa memperbarui v2.1.2 secara langsung; instalasi v2.1.5 akan muncul sebagai aplikasi terpisah.
 
 Sebelum menghapus aplikasi lama, ekspor atau salin workspace dan model yang ingin dipertahankan. Uji bahwa data dapat dipulihkan. Setelah memastikan backup, pengguna dapat menghapus versi lama secara manual bila tidak lagi diperlukan. Jangan menghapus aplikasi lama sebelum memastikan file penting tersimpan.
 

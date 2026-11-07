@@ -84,10 +84,11 @@ jobs:
         run: cmake --build build --parallel 2
 
       - name: Verify APK release signature
+        id: signed_apk
         working-directory: forge-workbench/native-qt6
         run: |
-          APK=$(find build -type f -name '*.apk' -print -quit)
-          test -n "$APK"
+          APK="build/android-build/build/outputs/apk/debug/android-build-debug-signed.apk"
+          test -s "$APK" || { echo "Signed Qt APK not found at expected output path: $APK"; find build -type f -name '*.apk' -print; exit 1; }
           SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
           APKSIGNER="$SDK_ROOT/build-tools/34.0.0/apksigner"
           test -x "$APKSIGNER"
@@ -97,15 +98,15 @@ jobs:
             echo "Refusing to publish an APK signed with the Android debug certificate."
             exit 1
           fi
+          echo "path=$APK" >> "$GITHUB_OUTPUT"
           rm -f "$QT_ANDROID_KEYSTORE_PATH"
 
       - name: Locate and checksum APK
         id: artifact
         working-directory: forge-workbench/native-qt6
         run: |
-          mapfile -t APKS < <(find build -type f -name '*.apk' -print)
-          test "${#APKS[@]}" -eq 1 || { echo "Expected exactly one APK; found ${#APKS[@]}"; exit 1; }
-          APK="${APKS[0]}"
+          APK="${{ steps.signed_apk.outputs.path }}"
+          test -s "$APK"
           cp "$APK" ForgeWorkbench-${GITHUB_REF_NAME#v}.apk
           sha256sum ForgeWorkbench-${GITHUB_REF_NAME#v}.apk | tee ForgeWorkbench-${GITHUB_REF_NAME#v}.apk.sha256
           echo "apk=ForgeWorkbench-${GITHUB_REF_NAME#v}.apk" >> "$GITHUB_OUTPUT"
