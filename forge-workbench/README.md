@@ -33,18 +33,22 @@ Server sekarang sudah melayani file statis (`/assets/...`) sehingga logo dan res
 
 
 ## Pengelompokan UI Forge
-Workbench menempatkan empat pintasan utama di activity rail kiri: Editor Kode, AI Engine, Copilot, dan Search. Source Control serta Run & Debug dikelompokkan sebagai alat sekunder. Tombol workspace ganda dan Copilot mengambang dihapus. Theme menyediakan pilihan Dark, Light, dan System yang disimpan di perangkat.
+Workbench menempatkan empat pintasan utama di activity rail kiri: Editor Kode, AI Engine, Copilot, dan Search. Source Control serta Run & Jobs dikelompokkan sebagai alat sekunder; debugger kode belum tersedia. Tombol workspace ganda dan Copilot mengambang dihapus. Theme menyediakan pilihan Dark, Light, dan System yang disimpan di perangkat.
 - **Kode Biasa** — editor file dan proyek. Search, Source Control, Run, dan aksi format memakai navigasi/toolbar yang sudah ada, bukan tombol duplikat di panel.
 - **AI Engine** — satu workspace dengan bagian Models, Runtime, Tokenizer, Compiler, Hardware, dan Training. Bagian ini memetakan tugas ke `forge-inference`, `forge-compiler`, `forge-trainer`, dan `forge-litgpt` sesuai perannya.
 - **Copilot** — panel chat terpisah yang dibuka dari tombol Copilot pada activity rail kiri.
 - **Search** — pencarian isi file workspace terpisah dari pengelolaan model.
-- **Editor profesional** — bahasa otomatis/manual dan syntax highlighting lokal untuk JavaScript/TypeScript, Python, HTML/XML, CSS/SCSS, JSON/YAML, C/C++, Java/Kotlin, Bash, Markdown, dan SQL.
+- **Editor kode** — tab edit, dirty-state, Save/Save All, syntax highlighting lokal, language override, indent/outdent, auto-indent dasar, auto-pair tanda kurung/kutip, Quick Open (Ctrl/Cmd+P), Find/Replace (Ctrl/Cmd+F/H), Go to Line (Ctrl/Cmd+G), command palette (Ctrl/Cmd+Shift+P), shortcut Ctrl/Cmd+Tab, dan line/column status.
+- **Preferensi editor** — tema, pack bahasa, syntax highlighting, bahasa override, dan file terbaru disimpan lokal di browser/perangkat.
+- **Batas editor** — permukaan edit tetap textarea dengan highlight overlay. Ini belum setara Monaco/VS Code: belum ada IntelliSense, language-server diagnostics, simbol/refactor, multi-cursor, folding, debugger, atau shell terminal. Panel Problems dan Outline menyatakan batasan ini tanpa mengklaim fitur aktif.
 - **Editor Plugins** — aktif/nonaktifkan pack bahasa bawaan; pack terpilih disimpan di perangkat.
 
 Plugin `.dll`/native tidak berjalan langsung di browser. Plugin eksternal memerlukan host/API plugin tepercaya.
 - **Archive / Bongkar** — workspace ZIP tersendiri untuk meninjau atau mengedit entry arsip.
 
 `forge-editor` adalah server konektivitas HTTP/WebSocket/proxy, bukan UI editor visual atau mesin AI. Pengaturan lanjutan dan job AI memerlukan engine native, model, backend, serta adapter yang sesuai; menu UI tidak mengklaim job selesai bila komponen tersebut tidak tersedia.
+
+Audit perbandingan fitur, kemampuan yang ditambahkan, dan gap VS Code yang masih terbuka ada di [`EDITOR_FEATURE_AUDIT_ID.md`](EDITOR_FEATURE_AUDIT_ID.md).
 
 ## Backend API dan status implementasi
 
@@ -63,7 +67,7 @@ Gateway sekarang menyediakan baseline operasional untuk Workbench:
 - `GET /api/models/gguf?path=...&tensors=500` — baca header GGUF sungguhan: versi, arsitektur, metadata, daftar tensor (nama, dimensi, tipe quant), ukuran vocab.
 - `GET /api/files/hex?path=...&offset=0&length=512` — hex viewer read-only (maks 4096 byte per permintaan).
 - `GET /api/search?path=&q=...&regex=1&case=1` — pencarian kode di workspace (lewati node_modules/.git/binary/file >1 MB).
-- `GET /api/git/status|diff|log?path=...` dan `POST /api/git/init|commit` — operasi Git lokal tanpa shell dan dengan hooks dimatikan. Push belum ada.
+- `GET /api/git/status|diff|log?path=...` dan `POST /api/git/init|commit` — operasi Git lokal tanpa shell dan dengan hooks dimatikan. API tersedia; panel Source Control pada UI belum terhubung. Push/pull belum ada.
 - `POST /api/run` — jalankan `.js/.mjs/.py/.sh` (dari `path` atau `code`+`language`). **Hanya aktif dengan `FORGE_EXECUTE=1`**, timeout 10 dtk (`FORGE_RUN_TIMEOUT_MS`), output dibatasi 100 KB. Ini bukan sandbox penuh; jangan buka ke jaringan publik tanpa isolasi.
 
 - `POST /api/models/convert` `{path, output, type: f16|f32, name?, vocab?}` — safetensors → GGUF. Hanya `LlamaForCausalLM`, hanya butuh `python3` + `numpy` (`gateway/tools/forge_gguf.py`). Butuh `FORGE_EXECUTE=1`. `vocab:true` (tokenizer BPE) eksperimental.

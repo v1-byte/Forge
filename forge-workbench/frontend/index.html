@@ -1070,7 +1070,7 @@
       gap: 12px;
       transition: background 0.12s;
     }
-    .palette-item:hover { background: var(--surface-2); }
+    .palette-item:hover, .palette-item.active { background: var(--surface-2); }
     .palette-item-icon {
       width: 28px; height: 28px;
       border-radius: 6px;
@@ -1572,8 +1572,8 @@
       { id: "ai-engineering", label: "AI Engine", shortLabel: "AI Engine", icon: ActIcon("sparkles"), toast: "AI Engine — model, runtime, compiler, hardware, dan training" },
       { id: "copilot", label: "Copilot", shortLabel: "Copilot", icon: ({ active }) => <CopilotLogo size={20} />, toast: "Copilot — chat dengan model aktif" },
       { id: "search", label: "Search", shortLabel: "Search", icon: ActIcon("search"), toast: "Search — cari di workspace" },
-      { id: "git", label: "Source Control", shortLabel: "Git", icon: ActIcon("gitBranch"), toast: "Source Control — branch & commit", secondary: true },
-      { id: "debug", label: "Run & Debug", shortLabel: "Run", icon: ActIcon("bug"), toast: "Run & Debug — jalankan dan debug kode", secondary: true },
+      { id: "git", label: "Source Control", shortLabel: "Git", icon: ActIcon("gitBranch"), toast: "Source Control — panel Git belum terhubung di UI ini", secondary: true },
+      { id: "debug", label: "Run & Jobs", shortLabel: "Run", icon: ActIcon("bug"), toast: "Run & Jobs — jalankan file yang didukung dan pantau job; debugger kode belum tersedia", secondary: true },
     ];
 
     // ===== WORKSPACE LOKAL (jalan tanpa gateway; tersimpan di browser/WebView) =====
@@ -1690,8 +1690,7 @@
       const [workspaceSearch, setWorkspaceSearch] = useState("");
       const [theme, setTheme] = useState(() => { try { return localStorage.getItem("forge-theme") || "dark"; } catch { return "dark"; } });
       const [themeOpen, setThemeOpen] = useState(false);
-      const [syntaxEnabled, setSyntaxEnabled] = useState(true);
-      const [languageOverrides, setLanguageOverrides] = useState({});
+      const [syntaxEnabled, setSyntaxEnabled] = useState(() => { try { return localStorage.getItem("forge-syntax-enabled") !== "false"; } catch { return true; } });
       const [pluginsOpen, setPluginsOpen] = useState(false);
       const [editorPlugins, setEditorPlugins] = useState(() => { try { const saved = JSON.parse(localStorage.getItem("forge-editor-plugins") || "null"); return Array.isArray(saved) ? saved : DEFAULT_EDITOR_PLUGINS; } catch { return DEFAULT_EDITOR_PLUGINS; } });
       const [toolMode, setToolMode] = useState("models");
@@ -1714,6 +1713,18 @@
       const [aiPanelOpen, setAiPanelOpen] = useState(false);
       const [paletteOpen, setPaletteOpen] = useState(false);
       const [paletteQuery, setPaletteQuery] = useState("");
+      const [paletteIndex, setPaletteIndex] = useState(0);
+      const [quickOpen, setQuickOpen] = useState(false);
+      const [quickQuery, setQuickQuery] = useState("");
+      const [quickIndex, setQuickIndex] = useState(0);
+      const [recentFiles, setRecentFiles] = useState(() => { try { const x = JSON.parse(localStorage.getItem("forge-recent-files") || "[]"); return Array.isArray(x) ? x : []; } catch { return []; } });
+      const [findOpen, setFindOpen] = useState(false);
+      const [replaceMode, setReplaceMode] = useState(false);
+      const [findQuery, setFindQuery] = useState("");
+      const [replaceQuery, setReplaceQuery] = useState("");
+      const [cursorPosition, setCursorPosition] = useState(0);
+      const [selectionLength, setSelectionLength] = useState(0);
+      const [languageOverrides, setLanguageOverrides] = useState(() => { try { return JSON.parse(localStorage.getItem("forge-language-overrides") || "{}"); } catch { return {}; } });
       const [ctxMenu, setCtxMenu] = useState(null);
 
       const [openTabs, setOpenTabs] = useState([]);
@@ -1724,7 +1735,7 @@
       const [chatInput, setChatInput] = useState("");
       const [messages, setMessages] = useState([]);
       const [typing, setTyping] = useState(false);
-      const [termLines, setTermLines] = useState(["Forge terminal connected — workspace kosong"]);
+      const [termLines, setTermLines] = useState(["Forge Workbench ready — panel perintah bawaan, bukan shell sistem"]);
       const [termInput, setTermInput] = useState("");
       const [quantizeProgress, setQuantizeProgress] = useState({});
       const termRef = useRef(null);
@@ -1740,6 +1751,14 @@
       const editorLanguageSelection = activeTab ? (languageOverrides[activeTab.id] || "auto") : "auto";
       const editorResolvedLanguage = activeTab ? (editorLanguageSelection === "auto" ? languageForName(activeTab.name) : editorLanguageSelection) : "plaintext";
       const highlightedActiveCode = useMemo(() => makeHighlightedCode(activeTab?.content || "", editorResolvedLanguage, editorPlugins, syntaxEnabled), [activeTab?.content, editorResolvedLanguage, editorPlugins, syntaxEnabled]);
+      const quickOpenFiles = useMemo(() => {
+        const query = quickQuery.trim().toLowerCase();
+        return Object.keys(ws.files || {}).filter(path => !query || path.toLowerCase().includes(query))
+          .sort((a, b) => {
+            const rank = path => { if (openTabs.some(t => t.path === path)) return -2; const recent = recentFiles.indexOf(path); return recent >= 0 ? recent : recentFiles.length + 1; };
+            return rank(a) - rank(b) || a.localeCompare(b);
+          }).slice(0, 80);
+      }, [ws.files, quickQuery, openTabs, recentFiles]);
       const workspaceSearchResults = useMemo(() => {
         const query = workspaceSearch.trim().toLowerCase();
         if (!query) return [];
@@ -1787,34 +1806,37 @@
         return () => media.removeEventListener?.("change", apply);
       }, [theme]);
       useEffect(() => { try { localStorage.setItem("forge-editor-plugins", JSON.stringify(editorPlugins)); } catch {} }, [editorPlugins]);
-      // Keyboard shortcuts
+      useEffect(() => { try { localStorage.setItem("forge-language-overrides", JSON.stringify(languageOverrides)); } catch {} }, [languageOverrides]);
+      useEffect(() => { try { localStorage.setItem("forge-syntax-enabled", String(syntaxEnabled)); } catch {} }, [syntaxEnabled]);
+      useEffect(() => { try { localStorage.setItem("forge-recent-files", JSON.stringify(recentFiles.slice(0, 30))); } catch {} }, [recentFiles]);
+      // Keyboard shortcuts: browser/editor inputs keep their normal typing behavior; explicit IDE commands stay available.
       useEffect(() => {
         const onKey = (e) => {
           const mod = e.ctrlKey || e.metaKey;
-          if (mod && e.key.toLowerCase() === "k") {
-            e.preventDefault();
-            setPaletteOpen(v => !v);
-          }
-          if (mod && e.key.toLowerCase() === "s") {
-            e.preventDefault();
-            if (e.shiftKey) actionsRef.current.saveAll?.(); else actionsRef.current.saveActive?.();
-          }
-          if (mod && e.key.toLowerCase() === "o") {
-            e.preventDefault();
-            fileInputRef.current?.click();
-          }
+          const key = e.key.toLowerCase();
+          const target = e.target;
+          const isTextInput = target instanceof HTMLElement && (target.matches("input, textarea, select") || target.isContentEditable);
+          if (mod && key === "k") { e.preventDefault(); setPaletteQuery(""); setPaletteIndex(0); setPaletteOpen(v => !v); return; }
+          if (mod && key === "s") { e.preventDefault(); if (e.shiftKey) actionsRef.current.saveAll?.(); else actionsRef.current.saveActive?.(); return; }
+          if (mod && key === "o" && !isTextInput) { e.preventDefault(); fileInputRef.current?.click(); return; }
+          if (mod && key === "p" && e.shiftKey) { e.preventDefault(); setPaletteQuery(""); setPaletteIndex(0); setPaletteOpen(true); return; }
+          if (mod && key === "p" && !e.shiftKey) { e.preventDefault(); setQuickQuery(""); setQuickIndex(0); setQuickOpen(true); return; }
+          if (mod && key === "f") { e.preventDefault(); actionsRef.current.openFind?.(false); return; }
+          if (mod && key === "h") { e.preventDefault(); actionsRef.current.openFind?.(true); return; }
+          if (mod && key === "g") { e.preventDefault(); actionsRef.current.goToLine?.(); return; }
+          if (mod && key === "w" && (!isTextInput || target?.classList?.contains("code-editor"))) { e.preventDefault(); if (activeTab) actionsRef.current.closeActive?.(); return; }
+          if (mod && key === "tab") { e.preventDefault(); actionsRef.current.cycleTab?.(e.shiftKey ? -1 : 1); return; }
           if (e.key === "Escape") {
-            setPaletteOpen(false);
-            setModelDropdown(false);
-            setCtxMenu(null);
-            setFileMenu(false);
+            if (quickOpen) setQuickOpen(false);
+            if (findOpen) setFindOpen(false);
+            setPaletteOpen(false); setModelDropdown(false); setCtxMenu(null); setFileMenu(false);
             setDialog(d => (d ? null : d));
             if (window.innerWidth < 1100) setAiPanelOpen(false);
           }
         };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-      }, []);
+      }, [quickOpen, findOpen, activeTab]);
 
       // Auto focus terminal
       useEffect(() => {
@@ -1904,6 +1926,7 @@
 
       const openWsFile = (path, rec = wsRef.current.files[path]) => {
         if (!rec) { notify(`File tidak ditemukan: ${path}`, "error"); return; }
+        setRecentFiles(current => [path, ...current.filter(x => x !== path)].slice(0, 30));
         const id = `ws:${path}`, name = baseName(path), ext = extOf(path);
         const tab = rec.kind === "text"
           ? { id, source: "ws", path, name, ext, content: rec.content, saved: rec.content, modified: false }
@@ -1913,6 +1936,16 @@
         if (isMobile()) setSidebarOpen(false);
       };
 
+      const jumpToWorkspaceResult = (result) => {
+        const rec = wsRef.current.files[result.path], current = openTabs.find(t => t.id === `ws:${result.path}`);
+        const content = current?.content ?? (rec?.kind === "text" ? rec.content : "");
+        const lines = content.split("\n"), lineIndex = Math.max(0, result.line - 1);
+        const lineStart = lines.slice(0, lineIndex).join("\n").length + (lineIndex ? 1 : 0);
+        const queryIndex = (lines[lineIndex] || "").toLocaleLowerCase().indexOf(workspaceSearch.trim().toLocaleLowerCase());
+        const pos = lineStart + Math.max(0, queryIndex);
+        setActivity("explorer"); setWorkbenchMode("code"); openWsFile(result.path);
+        requestAnimationFrame(() => { const el = editorTextareaRef.current; if (el) { el.focus(); el.setSelectionRange(pos, pos + (queryIndex >= 0 ? workspaceSearch.trim().length : 0)); setCursorPosition(pos); setSelectionLength(queryIndex >= 0 ? workspaceSearch.trim().length : 0); } });
+      };
       const openFile = (file) => {
         if (file.type === "folder") { setExpanded(e => ({ ...e, [file.id]: !e[file.id] })); return; }
         openWsFile(file.path);
@@ -2178,10 +2211,53 @@
           if (activeTab.ext === "json") out = `${JSON.stringify(JSON.parse(out), null, 2)}\n`;
           else if (out.trim()) out = out.replace(/\r\n/g, "\n").replace(/[ \t]+$/gm, "").replace(/\n*$/, "\n");
         } catch (e) { notify(`Format gagal: ${e.message}`, "error"); return; }
-        if (out === activeTab.content) { notify("Sudah rapi", "info"); return; }
+        if (out === activeTab.content) { notify("Tidak ada perubahan format; JSON diformat lokal, bahasa lain hanya normalisasi whitespace", "info"); return; }
         setOpenTabs(tabs => tabs.map(t => t.id === activeTab.id ? { ...t, content: out, modified: out !== t.saved } : t));
-        notify("Format selesai — tekan Save untuk menyimpan", "success");
+        notify(activeTab.ext === "json" ? "JSON diformat — tekan Save untuk menyimpan" : "Whitespace dinormalisasi (bukan formatter bahasa) — tekan Save untuk menyimpan", "success");
       };
+      const openFind = (withReplace = false) => {
+        const selected = editorTextareaRef.current?.value?.slice(editorTextareaRef.current.selectionStart, editorTextareaRef.current.selectionEnd) || "";
+        if (selected) setFindQuery(selected);
+        setFindOpen(true); setReplaceMode(withReplace);
+        requestAnimationFrame(() => document.getElementById("forge-find-input")?.focus());
+      };
+      const findNext = (direction = 1) => {
+        if (!activeTab || !findQuery) return;
+        const text = activeTab.content || "", needle = findQuery;
+        const lowerText = text.toLocaleLowerCase(), lowerNeedle = needle.toLocaleLowerCase();
+        const hits = []; let from = 0;
+        while (lowerNeedle && (from = lowerText.indexOf(lowerNeedle, from)) !== -1) { hits.push(from); from += Math.max(1, lowerNeedle.length); }
+        if (!hits.length) { notify("Tidak ada kecocokan", "info"); return; }
+        const current = editorTextareaRef.current?.selectionStart ?? cursorPosition;
+        const pos = direction > 0 ? (hits.find(x => x > current) ?? hits[0]) : ([...hits].reverse().find(x => x < current) ?? hits[hits.length - 1]);
+        requestAnimationFrame(() => { const el = editorTextareaRef.current; if (el) { el.focus(); el.setSelectionRange(pos, pos + needle.length); setCursorPosition(pos + needle.length); setSelectionLength(needle.length); } });
+      };
+      const replaceCurrent = () => {
+        if (!activeTab || !findQuery) return;
+        const text = activeTab.content || "", start = editorTextareaRef.current?.selectionStart ?? cursorPosition;
+        let pos = text.toLocaleLowerCase().indexOf(findQuery.toLocaleLowerCase(), Math.max(0, start - findQuery.length));
+        if (pos < 0) pos = text.toLocaleLowerCase().indexOf(findQuery.toLocaleLowerCase());
+        if (pos < 0) { notify("Tidak ada kecocokan untuk diganti", "info"); return; }
+        const out = text.slice(0, pos) + replaceQuery + text.slice(pos + findQuery.length);
+        setOpenTabs(tabs => tabs.map(t => t.id === activeTab.id ? { ...t, content: out, modified: out !== t.saved } : t));
+        requestAnimationFrame(() => { const el = editorTextareaRef.current; if (el) { el.focus(); el.setSelectionRange(pos + replaceQuery.length, pos + replaceQuery.length); } });
+      };
+      const replaceAll = () => {
+        if (!activeTab || !findQuery) return;
+        const count = (activeTab.content.match(new RegExp(findQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi")) || []).length;
+        if (!count) { notify("Tidak ada kecocokan untuk diganti", "info"); return; }
+        if (!window.confirm(`Ganti ${count} kecocokan di ${activeTab.name}?`)) return;
+        const out = activeTab.content.replace(new RegExp(findQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), () => replaceQuery);
+        setOpenTabs(tabs => tabs.map(t => t.id === activeTab.id ? { ...t, content: out, modified: out !== t.saved } : t));
+        notify(`${count} kecocokan diganti`, "success");
+      };
+      const goToLine = () => openDialog({
+        title: "Lompat ke baris", message: activeTab ? `Baris 1–${activeTab.content.split("\n").length} di ${activeTab.name}` : "Buka file teks terlebih dahulu.",
+        fields: [{ key: "line", label: "Nomor baris", placeholder: "mis. 42" }], values: { line: "1" }, submitLabel: "Lompat",
+        onSubmit: (v) => { if (!activeTab) return false; const wanted = Math.max(1, Math.min(activeTab.content.split("\n").length, Number.parseInt(v.line, 10) || 1)); const pos = activeTab.content.split("\n").slice(0, wanted - 1).join("\n").length + (wanted > 1 ? 1 : 0); requestAnimationFrame(() => { const el = editorTextareaRef.current; if (el) { el.focus(); el.setSelectionRange(pos, pos); setCursorPosition(pos); setSelectionLength(0); } }); return true; },
+      });
+      const cycleTab = (direction = 1) => { if (!openTabs.length) return; const index = openTabs.findIndex(t => t.id === activeTabId); const next = (index + direction + openTabs.length) % openTabs.length; setActiveTabId(openTabs[next].id); };
+      const closeActive = () => { if (activeTab) closeTab(activeTab.id); };
       const inspectActive = () => {
         if (!activeTab) { notify("Tidak ada file terbuka", "error"); return; }
         const lines = activeTab.content.split("\n").length;
@@ -2193,7 +2269,7 @@
       };
       const copyPath = (p) => { (navigator.clipboard?.writeText(p) || Promise.reject()).then(() => notify(`Path disalin: ${p}`, "success")).catch(() => notify(p, "info")); };
 
-      actionsRef.current = { saveActive, saveAll };
+      actionsRef.current = { saveActive, saveAll, openFind, goToLine, cycleTab, closeActive, formatActive };
 
       const doCloseTab = (id) => {
         const idx = openTabs.findIndex(t => t.id === id);
@@ -2300,7 +2376,7 @@
         const cmd = termInput.toLowerCase();
         let out = `> ${termInput}`;
         if (cmd.includes("clear")) {
-          setTermLines(["Forge terminal ready"]);
+          setTermLines(["Forge Workbench panel ready — perintah terbatas, bukan shell sistem"]);
           setTermInput("");
           notify("Terminal dibersihkan");
           return;
@@ -2538,6 +2614,15 @@
       );
 
       const commands = [
+        { id: "quick-open", label: "Quick Open File…", action: () => { setQuickQuery(""); setQuickIndex(0); setQuickOpen(true); } },
+        { id: "find", label: "Find in Active File…", action: () => openFind(false) },
+        { id: "replace", label: "Replace in Active File…", action: () => openFind(true) },
+        { id: "goto-line", label: "Go to Line…", action: goToLine },
+        { id: "format", label: "Format Active File (limited)", action: formatActive },
+        { id: "close-tab", label: "Close Active Tab", action: closeActive },
+        { id: "next-tab", label: "Next Editor Tab", action: () => cycleTab(1) },
+        { id: "prev-tab", label: "Previous Editor Tab", action: () => cycleTab(-1) },
+        { id: "shortcut-help", label: "Keyboard Shortcuts Help", action: () => openDialog({ title: "Pintasan Keyboard", message: "Ctrl/Cmd+Shift+P: Command Palette • Ctrl/Cmd+P: Quick Open file • Ctrl/Cmd+S: Simpan • Ctrl/Cmd+Shift+S: Simpan semua • Ctrl/Cmd+F: Cari file aktif • Ctrl/Cmd+H: Ganti • Ctrl/Cmd+G: Lompat ke baris • Ctrl/Cmd+Tab: Tab berikutnya • Ctrl/Cmd+W: Tutup tab aktif • Tab/Shift+Tab: Indentasi/outdentasi", submitLabel: "Tutup", onSubmit: () => true }) },
         { id: "inference", label: "Submit Inference Job", action: () => submitJob("inference", { model: activeModel }) },
         { id: "train", label: "Submit Training Job", action: () => submitJob("training", { model: activeModel }) },
         { id: "compile", label: "Submit Compile Job", action: () => submitJob("compile", { model: activeModel }) },
@@ -2545,6 +2630,7 @@
         { id: "tokens", label: "Open Tokenizer Tools", action: () => { setWorkbench("ai-engineering"); setAiEngineeringTab("tokens"); } },
         { id: "explorer", label: "Open Workspace Explorer", action: () => { setActivity("explorer"); setSidebarOpen(true); notify("Explorer dibuka"); } },
       ].filter(c => c.label.toLowerCase().includes(paletteQuery.toLowerCase()));
+      const paletteRun = (command) => { if (!command) return; command.action(); setPaletteOpen(false); setPaletteQuery(""); setPaletteIndex(0); };
 
       return (
         <div className="app">
@@ -2651,7 +2737,7 @@
                       <div style={{ maxHeight: 220, overflowY: "auto", marginTop: 7 }}>
                         {!workspaceSearch.trim() && <div style={{ padding: "8px 2px", color: "var(--muted-2)", fontSize: 10 }}>Cari isi file teks yang tersimpan di workspace.</div>}
                         {workspaceSearch.trim() && workspaceSearchResults.length === 0 && <div style={{ padding: "8px 2px", color: "var(--muted-2)", fontSize: 10 }}>Tidak ada hasil yang cocok.</div>}
-                        {workspaceSearchResults.map((result, i) => <button key={`${result.path}:${result.line}:${i}`} onClick={() => { setActivity("explorer"); setWorkbenchMode("code"); openWsFile(result.path); }} style={{ width: "100%", display: "block", textAlign: "left", padding: "7px 6px", borderBottom: "1px solid var(--border)", color: "var(--text-2)", fontSize: 9 }}>
+                        {workspaceSearchResults.map((result, i) => <button key={`${result.path}:${result.line}:${i}`} onClick={() => jumpToWorkspaceResult(result)} style={{ width: "100%", display: "block", textAlign: "left", padding: "7px 6px", borderBottom: "1px solid var(--border)", color: "var(--text-2)", fontSize: 9 }}>
                           <strong style={{ display: "block", color: "var(--accent)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{result.path}:{result.line}</strong>
                           <span style={{ display: "block", marginTop: 3, color: "var(--muted-2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{result.text || "(baris kosong)"}</span>
                         </button>)}
@@ -2685,7 +2771,7 @@
                     </div>
                     <div className="outline">
                       <div className="outline-title">Outline • {activeTab?.name || "—"}</div>
-                      <div className="outline-item"><span className="bar" /> {activeTab ? "Symbols loaded from active file" : "No file symbols"}</div>
+                      <div className="outline-item"><span className="bar" /> {activeTab ? "Navigasi simbol belum tersedia untuk editor ini." : "Buka file untuk melihat navigasi dokumen."}</div>
                     </div>
                   </>
                 )}
@@ -2719,6 +2805,13 @@
               </div>
 
               <div className="editor-content">
+                {activeTab && findOpen && <div style={{ display: "flex", gap: 6, alignItems: "center", padding: "7px 10px", background: "var(--surface)", borderBottom: "1px solid var(--border)", flexWrap: "wrap" }}>
+                  <input id="forge-find-input" aria-label="Cari dalam file aktif" value={findQuery} onChange={e => setFindQuery(e.target.value)} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); findNext(e.shiftKey ? -1 : 1); } }} placeholder="Cari teks di file aktif" style={{ minWidth: 140, flex: 1, height: 30, border: "1px solid var(--border-hover)", borderRadius: 5, background: "var(--surface-2)", padding: "0 8px", fontSize: 12 }} />
+                  {replaceMode && <input aria-label="Ganti dengan" value={replaceQuery} onChange={e => setReplaceQuery(e.target.value)} placeholder="Ganti dengan" style={{ minWidth: 120, flex: 1, height: 30, border: "1px solid var(--border-hover)", borderRadius: 5, background: "var(--surface-2)", padding: "0 8px", fontSize: 12 }} />}
+                  <button className="icon-btn" onClick={() => findNext(-1)} title="Kecocokan sebelumnya">↑</button><button className="icon-btn" onClick={() => findNext(1)} title="Kecocokan berikutnya">↓</button>
+                  {replaceMode && <><button className="icon-btn" onClick={replaceCurrent}>Ganti</button><button className="icon-btn" onClick={replaceAll}>Ganti semua</button></>}
+                  <button className="icon-btn" onClick={() => setFindOpen(false)} aria-label="Tutup pencarian">Tutup</button>
+                </div>}
                 {activeTab ? (
                   <div className="code-view">
                     <div className="gutter" ref={editorGutterRef}>
@@ -2747,7 +2840,27 @@
                       </div>
                       <div className={`editor-code-surface ${syntaxEnabled ? "" : "syntax-plain"}`}>
                         {syntaxEnabled && <pre className="syntax-highlight" ref={syntaxHighlightRef} aria-hidden="true"><code dangerouslySetInnerHTML={{ __html: highlightedActiveCode }} /></pre>}
-                        <textarea ref={editorTextareaRef} className="code-editor" spellCheck="false" readOnly={!!activeTab.readOnly} value={activeTab.content} onScroll={e => { const top = e.currentTarget.scrollTop, left = e.currentTarget.scrollLeft; if (syntaxHighlightRef.current) { syntaxHighlightRef.current.scrollTop = top; syntaxHighlightRef.current.scrollLeft = left; } if (editorGutterRef.current) editorGutterRef.current.scrollTop = top; }} onChange={e => { const v = e.target.value; setOpenTabs(tabs => tabs.map(t => t.id === activeTab.id ? { ...t, content: v, modified: v !== t.saved } : t)); }} />
+                        <textarea ref={editorTextareaRef} className="code-editor" aria-label={`Editor kode: ${activeTab.name}`} spellCheck="false" readOnly={!!activeTab.readOnly} value={activeTab.content} onScroll={e => { const top = e.currentTarget.scrollTop, left = e.currentTarget.scrollLeft; if (syntaxHighlightRef.current) { syntaxHighlightRef.current.scrollTop = top; syntaxHighlightRef.current.scrollLeft = left; } if (editorGutterRef.current) editorGutterRef.current.scrollTop = top; }} onSelect={e => { setCursorPosition(e.currentTarget.selectionStart); setSelectionLength(e.currentTarget.selectionEnd - e.currentTarget.selectionStart); }} onKeyUp={e => { setCursorPosition(e.currentTarget.selectionStart); setSelectionLength(e.currentTarget.selectionEnd - e.currentTarget.selectionStart); }} onChange={e => { const el = e.currentTarget, v = el.value; setOpenTabs(tabs => tabs.map(t => t.id === activeTab.id ? { ...t, content: v, modified: v !== t.saved } : t)); setCursorPosition(el.selectionStart); setSelectionLength(el.selectionEnd - el.selectionStart); }} onKeyDown={e => {
+                          const el = e.currentTarget, start = el.selectionStart, end = el.selectionEnd, value = activeTab.content;
+                          if (activeTab.readOnly) return;
+                          if (e.key === "Tab") {
+                            e.preventDefault();
+                            const lineStart = value.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+                            const selected = value.slice(lineStart, end);
+                            const lines = selected.split("\n");
+                            const out = e.shiftKey ? lines.map(line => line.startsWith("  ") ? line.slice(2) : line.startsWith("\t") ? line.slice(1) : line).join("\n") : lines.map(line => "  " + line).join("\n");
+                            const next = value.slice(0, lineStart) + out + value.slice(end);
+                            setOpenTabs(tabs => tabs.map(t => t.id === activeTab.id ? { ...t, content: next, modified: next !== t.saved } : t));
+                            requestAnimationFrame(() => { const pos = Math.max(lineStart, end + out.length - selected.length); el.focus(); el.setSelectionRange(e.shiftKey ? start : start + 2, pos); });
+                            return;
+                          }
+                          if (e.key === "Enter") {
+                            const before = value.slice(0, start), line = before.slice(before.lastIndexOf("\n") + 1), indent = (line.match(/^\s*/) || [""])[0] + (/[{[(]\s*$/.test(line) ? "  " : "");
+                            if (indent) { e.preventDefault(); const next = value.slice(0, start) + "\n" + indent + value.slice(end); setOpenTabs(tabs => tabs.map(t => t.id === activeTab.id ? { ...t, content: next, modified: next !== t.saved } : t)); requestAnimationFrame(() => { el.focus(); el.setSelectionRange(start + 1 + indent.length, start + 1 + indent.length); }); }
+                          }
+                          const pairs = { "(": ")", "[": "]", "{": "}", "\"": "\"", "'": "'", "`": "`" };
+                          if (!e.ctrlKey && !e.metaKey && pairs[e.key] && !activeTab.readOnly) { e.preventDefault(); const selected = value.slice(start, end); const next = value.slice(0, start) + e.key + selected + pairs[e.key] + value.slice(end); setOpenTabs(tabs => tabs.map(t => t.id === activeTab.id ? { ...t, content: next, modified: next !== t.saved } : t)); requestAnimationFrame(() => { el.focus(); el.setSelectionRange(start + 1, end + 1); }); }
+                        }} />
                       </div>
                       <div className="suggestion-card">
                         <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: "#A1A1AA", marginBottom: 6 }}>
@@ -2772,10 +2885,10 @@
               <div className={`panel ${panelCollapsed ? "collapsed" : ""}`}>
                 <div className="panel-tabs">
                   {[
-                    { id: "problems", label: "Problems", count: 2 },
+                    { id: "problems", label: "Problems" },
                     { id: "output", label: "Output" },
                     { id: "terminal", label: "Terminal" },
-                    { id: "inference", label: "Inference", dot: true },
+                    { id: "inference", label: "Inference" },
                     { id: "trainer", label: "Trainer" },
                   ].map(t => (
                     <button
@@ -2794,7 +2907,7 @@
                   ))}
                   <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
                     <button className="icon-btn" style={{ width: 24, height: 24 }} onClick={() => {
-                      setTermLines(["Forge terminal ready"]);
+                      setTermLines(["Forge Workbench panel ready — perintah terbatas, bukan shell sistem"]);
                       notify("Panel dibersihkan");
                     }}>Clear</button>
                     <button className="icon-btn" style={{ width: 24, height: 24 }} onClick={() => {
@@ -2827,11 +2940,11 @@
                       </>
                     )}
                     {panelTab === "problems" && (
-                      <div>No diagnostics loaded. Connect a language server or open a workspace file.</div>
+                      <div role="status" style={{ color: "var(--muted)" }}>Belum ada diagnostics. Syntax highlighting bukan pemeriksaan kesalahan; diagnostics memerlukan language server/compiler yang belum terhubung.</div>
                     )}
                     {panelTab === "output" && (
                       <div>
-                        [Forge Gateway] API adapter aktif<br/>
+                        {systemStatus?.unavailable ? "[Forge Gateway] Offline" : "[Forge Gateway] Status diperiksa"}<br/>
                         {activeJob ? `[${activeJob.type}] ${activeJob.status} • ${activeJob.progress}%` : "Tidak ada job aktif"}<br/>
                         {activeJob?.logs?.slice(-3).map((line, i) => <div key={i}>{line}</div>)}
                       </div>
@@ -2959,24 +3072,25 @@
 
           {/* STATUS BAR */}
           <div className="statusbar">
-            <button className="status-item" onClick={() => notify("Branch: main • klik untuk ganti branch")}>
-              <G name="gitBranch" size={12} /> No repository
+            <button className="status-item" onClick={() => notify("Panel Git belum tersedia di Workbench ini", "info")}>
+              <G name="gitBranch" size={12} /> Git belum terhubung
             </button>
             <span className="status-item" style={{ cursor: "default" }}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: systemStatus?.unavailable ? "#FACC15" : "#22C55E" }} /> {systemStatus?.unavailable ? "Gateway offline" : "Workspace ready"}
             </span>
-            <button className="status-item" onClick={() => { setPanelTab("problems"); setPanelCollapsed(false); notify("Diagnostics panel dibuka"); }}>
-              <G name="alert" size={12} color="#FACC15" /> Diagnostics
-              <G name="x" size={11} color="#EF4444" /> 1
+            <button className="status-item" onClick={() => { setPanelTab("problems"); setPanelCollapsed(false); notify("Panel Problems dibuka — belum ada language-server diagnostics"); }}>
+              <G name="alert" size={12} /> Problems
             </button>
             <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-              <button className="status-item" onClick={() => notify("Device: Pixel 8 • forge")}>
-                <G name="phone" size={12} /> Pixel 8
-              </button>
+              <span className="status-item" title="Workspace tersimpan lokal di browser/perangkat ini">
+                <G name="phone" size={12} /> Browser lokal
+              </span>
               <button className="status-item" onClick={() => { setPanelTab("output"); setPanelCollapsed(false); }}>
                 <G name="sparkles" size={12} /> {activeJob ? `${activeJob.type}: ${activeJob.status}` : "No active job"}
               </button>
-              <span className="status-item desktop-only" style={{ cursor: "default" }}>UTF-8 • Kotlin</span>
+              <span className="status-item desktop-only" style={{ cursor: "default" }}>
+                {activeTab ? `Ln ${(activeTab.content.slice(0, cursorPosition).match(/\n/g) || []).length + 1}, Col ${cursorPosition - activeTab.content.lastIndexOf("\n", Math.max(0, cursorPosition - 1))}${selectionLength ? ` • ${selectionLength} terpilih` : ""} • UTF-8 • ${editorResolvedLanguage}` : "UTF-8 • belum ada file aktif"}
+              </span>
             </div>
           </div>
 
@@ -2999,7 +3113,7 @@
           {/* COMMAND PALETTE */}
           {paletteOpen && (
             <div className="palette-overlay" onClick={() => setPaletteOpen(false)}>
-              <div className="palette" onClick={e => e.stopPropagation()}>
+              <div className="palette" role="dialog" aria-modal="true" aria-label="Command palette" onClick={e => e.stopPropagation()}>
                 <div className="palette-input-row">
                   <svg width="16" height="16" viewBox="0 0 16 16" style={{ color: "#71717B" }}>
                     <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.4"/>
@@ -3008,19 +3122,24 @@
                   <input
                     className="palette-input"
                     autoFocus
+                    role="combobox"
+                    aria-label="Cari perintah editor"
+                    aria-expanded="true"
                     value={paletteQuery}
-                    onChange={e => setPaletteQuery(e.target.value)}
-                    placeholder="Cari command… (GGUF, llama, tokenizer, compile, train)"
+                    onChange={e => { setPaletteQuery(e.target.value); setPaletteIndex(0); }}
+                    onKeyDown={e => {
+                      if (e.key === "ArrowDown") { e.preventDefault(); setPaletteIndex(i => commands.length ? (i + 1) % commands.length : 0); }
+                      else if (e.key === "ArrowUp") { e.preventDefault(); setPaletteIndex(i => commands.length ? (i - 1 + commands.length) % commands.length : 0); }
+                      else if (e.key === "Enter") { e.preventDefault(); paletteRun(commands[paletteIndex]); }
+                      else if (e.key === "Escape") { e.preventDefault(); setPaletteOpen(false); setPaletteQuery(""); }
+                    }}
+                    placeholder="Cari perintah… (Ctrl+P file, Ctrl+F cari, Ctrl+G baris)"
                   />
                   <span className="kbd">ESC</span>
                 </div>
                 <div className="palette-list">
-                  {commands.map(c => (
-                    <button key={c.id} className="palette-item" onClick={() => {
-                      c.action();
-                      setPaletteOpen(false);
-                      setPaletteQuery("");
-                    }}>
+                  {commands.map((c, i) => (
+                    <button key={c.id} className={`palette-item ${paletteIndex === i ? "active" : ""}`} aria-selected={paletteIndex === i} onMouseEnter={() => setPaletteIndex(i)} onClick={() => paletteRun(c)}>
                       <div className="palette-item-icon"><G name="sparkles" size={14} /></div>
                       <span style={{ fontSize: 13 }}>{c.label}</span>
                     </button>
@@ -3041,6 +3160,19 @@
               </div>
             </div>
           )}
+
+          {quickOpen && <div className="palette-overlay" onClick={() => setQuickOpen(false)}>
+            <div className="palette" role="dialog" aria-modal="true" aria-label="Quick Open File" onClick={e => e.stopPropagation()}>
+              <div className="palette-input-row"><input autoFocus aria-label="Cari file workspace" className="palette-input" value={quickQuery} onChange={e => { setQuickQuery(e.target.value); setQuickIndex(0); }} onKeyDown={e => {
+                if (e.key === "ArrowDown") { e.preventDefault(); setQuickIndex(i => quickOpenFiles.length ? (i + 1) % quickOpenFiles.length : 0); }
+                else if (e.key === "ArrowUp") { e.preventDefault(); setQuickIndex(i => quickOpenFiles.length ? (i - 1 + quickOpenFiles.length) % quickOpenFiles.length : 0); }
+                else if (e.key === "Enter") { e.preventDefault(); const path = quickOpenFiles[quickIndex]; if (path) { openWsFile(path); setQuickOpen(false); } }
+                else if (e.key === "Escape") { e.preventDefault(); setQuickOpen(false); }
+              }} placeholder="Ketik nama/path file…" /><span className="kbd">ESC</span></div>
+              <div className="palette-list">{quickOpenFiles.map((path, i) => <button key={path} className={`palette-item ${quickIndex === i ? "active" : ""}`} aria-selected={quickIndex === i} onMouseEnter={() => setQuickIndex(i)} onClick={() => { openWsFile(path); setQuickOpen(false); }}><div className="palette-item-icon"><G name="file" size={14} /></div><span style={{ fontSize: 12 }}>{path}</span></button>)}{!quickOpenFiles.length && <div style={{ padding: 24, textAlign: "center", color: "var(--muted)" }}>Tidak ada file yang cocok di workspace lokal.</div>}</div>
+              <div className="palette-footer"><span><span className="kbd">↑↓</span> Navigasi</span><span><span className="kbd">Enter</span> Buka</span><span style={{ marginLeft: "auto" }}>Ctrl+P • Quick Open</span></div>
+            </div>
+          </div>}
 
           {/* CONTEXT MENU */}
           {ctxMenu && (() => {
