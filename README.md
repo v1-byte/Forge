@@ -1,4 +1,6 @@
 # Forge Engine Runtime
+> **Sebelum mengerjakan:** baca [Panduan Kontribusi](CONTRIBUTING.md) dan [dokumen acuan utama](docs/CATATAN-SUPER-LENGKAP-FINAL.md).
+
 
 Forge menyatukan runtime AI dan tooling mesin; payload engine upstream tidak menyertakan UI browser. Aplikasi Workbench tersedia terpisah di `forge-workbench/`, tanpa mengganti backend engine.
 
