@@ -125,3 +125,9 @@ Workspace lokal bekerja tanpa gateway. Library JSZip dimuat dari CDN, jadi perlu
 Port native tersedia di [`native-qt6/`](native-qt6/). Port ini menambahkan target Qt 6/QML untuk UI dan C++17 untuk backend tanpa menghapus UI web React atau gateway Node.js yang sudah ada. Dengan demikian, tampilan dan workflow lama tetap tersedia, sementara aplikasi desktop/Android dapat dibangun dari source native yang sama.
 
 Build dan arsitektur dijelaskan di [`native-qt6/README_CPP_QT6_ID.md`](native-qt6/README_CPP_QT6_ID.md). Fitur native yang tersedia meliputi workspace explorer, baca/tulis file, pencarian, status engine, tokenizer Unicode baseline, job storage, dan safe/native execution toggle. Adapter inference, compiler, trainer, GGUF, ZIP, dan Git lanjutan tetap menggunakan engine/adapters yang dikonfigurasi deployment.
+
+## Pembaruan versi
+
+UI browser memeriksa release terbaru saat dibuka dan setiap jam melalui `GET /api/update`. Jika versi baru tersedia, tautan versi di topbar membuka catatan rilis GitHub. Karena Workbench browser disajikan oleh proses Node.js yang berjalan di komputer/server pemiliknya, UI browser tidak mengganti file instalasi server secara diam-diam. Setelah memeriksa release, administrator memperbarui salinan kode dan memulai ulang server, misalnya dengan `git pull --ff-only` lalu menjalankan kembali `npm start`. Pemeriksaan versi hanya membaca metadata release publik; tidak memerlukan token GitHub.
+
+Aplikasi native Qt di Android memiliki updater terpisah: unduh APK release dan cocokkan SHA-256 sebelum membuka installer Android. Android tetap meminta konfirmasi pemasangan.

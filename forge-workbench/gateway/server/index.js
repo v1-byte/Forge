@@ -18,6 +18,8 @@ const jobs = new Map();
 const dataRoot = path.join(root, 'gateway', 'data');
 const jobFile = path.join(dataRoot, 'jobs.json');
 const jobStreams = new Map();
+const workbenchVersion = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
+let releaseCache = { checkedAt: 0, data: null };
 fs.mkdirSync(dataRoot, { recursive: true });
 try { for (const job of JSON.parse(fs.readFileSync(jobFile, 'utf8'))) jobs.set(job.id, job); } catch {}
 function persistJobs() { try { fs.writeFileSync(jobFile, JSON.stringify([...jobs.values()].slice(-500), null, 2)); } catch {} }
@@ -78,6 +80,24 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`); const pathname = decodeURIComponent(url.pathname);
   try {
     if (req.method === 'GET' && pathname === '/health') return json(res, { ok: true, service: 'forge-workbench-gateway', time: new Date().toISOString() });
+    if (req.method === 'GET' && pathname === '/api/update') {
+      const now = Date.now();
+      if (!releaseCache.data || now - releaseCache.checkedAt > 15 * 60 * 1000) {
+        try {
+          const response = await fetch('https://api.github.com/repos/v1-byte/Forge/releases/latest', { headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': 'Forge-Workbench-Updater/2.1.2' }, signal: AbortSignal.timeout(5000) });
+          if (!response.ok) throw new Error(`GitHub API returned ${response.status}`);
+          const release = await response.json();
+          const latestVersion = String(release.tag_name || '').replace(/^v/i, '');
+          const numeric = value => String(value).replace(/^v/i, '').split(/[.+-]/).slice(0, 3).map(part => Number.parseInt(part, 10) || 0);
+          const current = numeric(workbenchVersion), latest = numeric(latestVersion);
+          let comparison = 0; for (let i = 0; i < 3; i++) { if ((latest[i] || 0) !== (current[i] || 0)) { comparison = (latest[i] || 0) > (current[i] || 0) ? 1 : -1; break; } }
+          releaseCache = { checkedAt: now, data: { ok: true, currentVersion: workbenchVersion, latestVersion, updateAvailable: comparison > 0, releaseUrl: release.html_url || 'https://github.com/v1-byte/Forge/releases/latest', checkedAt: new Date(now).toISOString() } };
+        } catch (error) {
+          releaseCache = { checkedAt: now, data: { ok: false, currentVersion: workbenchVersion, error: 'Pengecekan versi belum tersedia', checkedAt: new Date(now).toISOString() } };
+        }
+      }
+      return json(res, releaseCache.data);
+    }
     if (req.method === 'GET' && pathname === '/api/engine-map') return sendFile(res, path.join(root, 'config/engine-map.json'));
     if (req.method === 'GET' && pathname === '/api/workbench-manifest') return sendFile(res, path.join(root, 'config/workbench-manifest.json'));
     if (req.method === 'GET' && pathname === '/api/status') return json(res, { ok: true, workspaceRoot, engineRoot, executeEngines, strictNative, hardware: hardware(), engines: ['forge-compiler','forge-editor','forge-inference','forge-trainer','forge-litgpt'].map(engineStatus) });

@@ -16,3 +16,7 @@ Android tetap menampilkan konfirmasi instalasi. Instalasi diam-diam tidak dilaku
 Release APK dibuat oleh `.github/workflows/android-release.yml` saat tag `vX.Y.Z` dipush. Workflow melampirkan APK dan checksum ke GitHub Release. Build pertama harus dilakukan oleh GitHub Actions karena mesin pengembangan lokal belum tentu memiliki Qt for Android, Android SDK, dan NDK.
 
 Untuk keamanan, updater hanya memakai HTTPS dan tidak menerima URL update dari input pengguna. Jangan mengganti release asset setelah publish tanpa mengganti checksum dan membuat release baru.
+
+## Workbench browser
+
+UI browser mengecek release terbaru saat startup dan satu kali per jam melalui endpoint gateway `/api/update`. Pemeriksaan memberi notifikasi tautan ke halaman rilis; file aplikasi pada server tidak diganti otomatis. Admin harus memperbarui source dan restart proses Workbench. Pemeriksaan memakai API GitHub publik tanpa PAT atau secret.
