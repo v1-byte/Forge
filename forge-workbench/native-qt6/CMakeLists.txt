@@ -35,4 +35,5 @@ target_link_libraries(ForgeWorkbench PRIVATE
 install(TARGETS ForgeWorkbench
     BUNDLE DESTINATION .
     RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib
 )
