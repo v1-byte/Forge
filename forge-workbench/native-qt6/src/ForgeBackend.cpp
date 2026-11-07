@@ -242,12 +242,12 @@ void ForgeBackend::downloadVerifiedApk() {
             else reason = "SHA-256 tidak cocok atau format checksum salah";
             file->cancelWriting(); m_updateDownloadInProgress = false; m_updateProgress = 0; emit updateProgressChanged();
             setUpdateStatus("Update dibatalkan — verifikasi gagal"); emit operationMessage("APK tidak dipasang: " + reason, true);
-            file->deleteLater(); hash->deleteLater(); reply->deleteLater(); return;
+            file->deleteLater(); delete hash; reply->deleteLater(); return;
         }
         m_updateDownloadInProgress = false; m_updateProgress = 100; emit updateProgressChanged();
         setUpdateStatus("APK terverifikasi SHA-256; Android akan meminta konfirmasi pemasangan");
         installDownloadedApk(apkPath);
-        file->deleteLater(); hash->deleteLater(); reply->deleteLater();
+        file->deleteLater(); delete hash; reply->deleteLater();
     });
 #endif
 }
