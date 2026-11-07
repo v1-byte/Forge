@@ -74,6 +74,7 @@ private:
     void appendJobLog(QVariantMap &job, const QString &line);
     void setUpdateStatus(const QString &status);
     void handleReleaseResponse(const QByteArray &data, bool manual);
+    void downloadVerifiedApk();
     void installDownloadedApk(const QString &path);
 
     QString m_workspaceRoot;
@@ -84,7 +85,10 @@ private:
     QString m_updateStatus = QStringLiteral("Belum diperiksa");
     QString m_latestVersion;
     QString m_updateApkUrl;
+    QString m_updateSha256Url;
     QString m_updateSha256;
+    bool m_updateCheckInProgress = false;
+    bool m_updateDownloadInProgress = false;
     int m_updateProgress = 0;
     bool m_updateAvailable = false;
 };

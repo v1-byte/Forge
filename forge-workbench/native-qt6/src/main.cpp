@@ -5,11 +5,15 @@
 #include <QDir>
 #include "ForgeBackend.h"
 
+#ifndef FORGE_VERSION
+#define FORGE_VERSION "0.0.0"
+#endif
+
 int main(int argc, char *argv[]) {
     QGuiApplication app(argc, argv);
     app.setApplicationName("Forge Workbench");
     app.setOrganizationName("Forge");
-    app.setApplicationVersion("2.1.2");
+    app.setApplicationVersion(FORGE_VERSION);
     QQuickStyle::setStyle("Basic");
 
     ForgeBackend backend;

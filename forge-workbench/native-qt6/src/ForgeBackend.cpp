@@ -13,6 +13,7 @@
 #include <QSysInfo>
 #include <QThread>
 #include <QCryptographicHash>
+#include <QSaveFile>
 #include <QCoreApplication>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -88,36 +89,72 @@ void ForgeBackend::handleReleaseResponse(const QByteArray &data, bool manual) {
         return;
     }
     const QJsonObject release = document.object();
-    const QString tag = release.value("tag_name").toString();
-    m_latestVersion = tag;
-    emit latestVersionChanged();
+    const QString tag = release.value("tag_name").toString().trimmed();
+    const QString currentText = comparableVersion(appVersion());
+    const QString latestText = comparableVersion(tag);
+    const QVersionNumber current = QVersionNumber::fromString(currentText);
+    const QVersionNumber latest = QVersionNumber::fromString(latestText);
+    const bool validTag = QRegularExpression("^v[0-9]+\\.[0-9]+\\.[0-9]+$").match(tag).hasMatch();
+    if (release.value("draft").toBool() || release.value("prerelease").toBool() || !validTag || current.isNull() || latest.isNull()) {
+        if (m_updateAvailable) { m_updateAvailable = false; emit updateAvailableChanged(); }
+        m_updateApkUrl.clear();
+        m_updateSha256Url.clear();
+        m_updateSha256.clear();
+        setUpdateStatus("Metadata update tidak valid atau bukan rilis stabil");
+        if (manual) emit operationMessage(m_updateStatus, true);
+        return;
+    }
+    if (m_latestVersion != tag) { m_latestVersion = tag; emit latestVersionChanged(); }
     m_updateApkUrl.clear();
-    m_updateSha256.clear();
+    m_updateSha256Url.clear();
+    const QString apkName = QString("ForgeWorkbench-%1.apk").arg(tag.mid(1));
+    const QString checksumName = apkName + ".sha256";
     for (const QJsonValue &value : release.value("assets").toArray()) {
         const QJsonObject asset = value.toObject();
         const QString name = asset.value("name").toString();
         const QString url = asset.value("browser_download_url").toString();
-        if (name.endsWith(".apk", Qt::CaseInsensitive) && m_updateApkUrl.isEmpty()) m_updateApkUrl = url;
-        if (name.endsWith(".sha256", Qt::CaseInsensitive) && m_updateSha256.isEmpty()) m_updateSha256 = url;
+        const QUrl parsed(url);
+        if (name == apkName || name == checksumName) {
+            if (!parsed.isValid() || parsed.scheme() != "https" || parsed.host() != "github.com") {
+                if (m_updateAvailable) { m_updateAvailable = false; emit updateAvailableChanged(); }
+                m_updateApkUrl.clear(); m_updateSha256Url.clear(); m_updateSha256.clear();
+                setUpdateStatus("URL asset rilis tidak aman");
+                if (manual) emit operationMessage(m_updateStatus, true);
+                return;
+            }
+            if (name == apkName) m_updateApkUrl = url;
+            if (name == checksumName) m_updateSha256Url = url;
+        }
     }
-    const QVersionNumber current = QVersionNumber::fromString(comparableVersion(appVersion()));
-    const QVersionNumber latest = QVersionNumber::fromString(comparableVersion(tag));
-    const bool available = !tag.isEmpty() && QVersionNumber::compare(latest, current) > 0 && !m_updateApkUrl.isEmpty();
+    const bool newer = QVersionNumber::compare(latest, current) > 0;
+    const bool available = newer && !m_updateApkUrl.isEmpty() && !m_updateSha256Url.isEmpty();
     if (m_updateAvailable != available) { m_updateAvailable = available; emit updateAvailableChanged(); }
-    setUpdateStatus(available ? QString("Update tersedia: %1").arg(tag) : QString("Sudah versi terbaru (%1)").arg(appVersion()));
-    if (manual) emit operationMessage(available ? QString("Update %1 tersedia").arg(tag) : "Forge sudah versi terbaru", false);
+    if (!available) { m_updateApkUrl.clear(); m_updateSha256Url.clear(); m_updateSha256.clear(); }
+    const QString status = available ? QString("Versi %1 tersedia — APK dan checksum tersedia").arg(tag) :
+        (newer ? "Rilis baru tidak memiliki pasangan APK/SHA-256 yang valid" : QString("Aplikasi sudah terbaru (%1)").arg(appVersion()));
+    setUpdateStatus(status);
+    if (manual) emit operationMessage(status, newer && !available);
 }
 
 void ForgeBackend::checkForUpdates(bool manual) {
+    if (m_updateCheckInProgress) { if (manual) emit operationMessage("Pemeriksaan update sedang berjalan", false); return; }
+    m_updateCheckInProgress = true;
+    if (m_updateAvailable) { m_updateAvailable = false; emit updateAvailableChanged(); }
+    m_updateApkUrl.clear(); m_updateSha256Url.clear(); m_updateSha256.clear();
     setUpdateStatus("Memeriksa update…");
     QNetworkRequest request(QUrl("https://api.github.com/repos/v1-byte/Forge/releases/latest"));
     request.setHeader(QNetworkRequest::UserAgentHeader, "Forge-Workbench-Updater/1.0");
     request.setRawHeader("Accept", "application/vnd.github+json");
+    request.setTransferTimeout(30000);
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     QNetworkReply *reply = m_network.get(request);
     connect(reply, &QNetworkReply::finished, this, [this, reply, manual]() {
+        m_updateCheckInProgress = false;
         const QByteArray data = reply->readAll();
-        if (reply->error() != QNetworkReply::NoError) {
-            setUpdateStatus(QString("Gagal memeriksa update: %1").arg(reply->errorString()));
+        const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (reply->error() != QNetworkReply::NoError || httpStatus != 200) {
+            if (m_updateAvailable) { m_updateAvailable = false; emit updateAvailableChanged(); }
+            setUpdateStatus(QString("Gagal memeriksa update (HTTP %1): %2").arg(httpStatus).arg(reply->errorString()));
             if (manual) emit operationMessage(m_updateStatus, true);
         } else handleReleaseResponse(data, manual);
         reply->deleteLater();
@@ -125,36 +162,92 @@ void ForgeBackend::checkForUpdates(bool manual) {
 }
 
 void ForgeBackend::downloadAndInstallUpdate() {
-    if (!m_updateAvailable || m_updateApkUrl.isEmpty()) { emit operationMessage("Belum ada update APK yang valid", true); return; }
+    if (m_updateDownloadInProgress) { emit operationMessage("Download update sedang berjalan", false); return; }
+    if (!m_updateAvailable || m_updateApkUrl.isEmpty() || m_updateSha256Url.isEmpty()) { emit operationMessage("Update dibatalkan: APK atau checksum SHA-256 tidak tersedia", true); return; }
+#ifndef Q_OS_ANDROID
+    emit operationMessage("Installer APK hanya tersedia pada Android", true);
+    return;
+#else
+    m_updateDownloadInProgress = true;
+    setUpdateStatus("Mengambil checksum resmi release…");
+    QNetworkRequest checksumRequest{QUrl(m_updateSha256Url)};
+    checksumRequest.setHeader(QNetworkRequest::UserAgentHeader, "Forge-Workbench-Updater/1.0");
+    checksumRequest.setTransferTimeout(30000);
+    checksumRequest.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    QNetworkReply *checksumReply = m_network.get(checksumRequest);
+    connect(checksumReply, &QNetworkReply::finished, this, [this, checksumReply]() {
+        const QByteArray body = checksumReply->readAll();
+        const int status = checksumReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const QRegularExpressionMatch match = QRegularExpression("^\\s*([0-9a-fA-F]{64})(?:\\s+\\*?[^\\r\\n]+)?\\s*$").match(QString::fromUtf8(body));
+        if (checksumReply->error() != QNetworkReply::NoError || status != 200 || !match.hasMatch()) {
+            m_updateDownloadInProgress = false;
+            setUpdateStatus("Gagal memverifikasi checksum release");
+            emit operationMessage(QString("Update dibatalkan: checksum tidak dapat diambil/valid (HTTP %1)").arg(status), true);
+            checksumReply->deleteLater();
+            return;
+        }
+        m_updateSha256 = match.captured(1).toLower();
+        checksumReply->deleteLater();
+        downloadVerifiedApk();
+    });
+#endif
+}
+
+void ForgeBackend::downloadVerifiedApk() {
 #ifndef Q_OS_ANDROID
     emit operationMessage("Installer APK hanya tersedia pada Android", true);
     return;
 #else
     const QString cache = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
-    QDir().mkpath(cache);
+    if (!QDir().mkpath(cache)) { m_updateDownloadInProgress = false; emit operationMessage("Folder cache update tidak dapat dibuat", true); return; }
     const QString apkPath = QDir(cache).filePath("forge-update.apk");
-    QFile *file = new QFile(apkPath, this);
-    if (!file->open(QIODevice::WriteOnly | QIODevice::Truncate)) { file->deleteLater(); emit operationMessage("Tidak dapat menyimpan APK update", true); return; }
+    auto *file = new QSaveFile(apkPath, this);
+    if (!file->open(QIODevice::WriteOnly)) { m_updateDownloadInProgress = false; file->deleteLater(); emit operationMessage("Tidak dapat menyiapkan APK update", true); return; }
     m_updateProgress = 0; emit updateProgressChanged(); setUpdateStatus("Mengunduh APK update…");
     QNetworkRequest request{QUrl(m_updateApkUrl)};
     request.setHeader(QNetworkRequest::UserAgentHeader, "Forge-Workbench-Updater/1.0");
+    request.setTransferTimeout(120000);
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     QNetworkReply *reply = m_network.get(request);
-    connect(reply, &QNetworkReply::readyRead, this, [reply, file]() { file->write(reply->readAll()); });
+    auto *hash = new QCryptographicHash(QCryptographicHash::Sha256);
+    auto consume = [reply, file, hash]() -> bool {
+        const QByteArray chunk = reply->readAll();
+        if (chunk.isEmpty()) return true;
+        constexpr qint64 maxApkBytes = 1024LL * 1024 * 1024;
+        if (file->size() < 0 || file->size() + chunk.size() > maxApkBytes || file->write(chunk) != chunk.size()) return false;
+        hash->addData(chunk);
+        return true;
+    };
+    connect(reply, &QNetworkReply::readyRead, this, [this, reply, consume]() {
+        if (!consume()) { setUpdateStatus("Download dihentikan: ukuran APK melewati batas atau penyimpanan gagal"); reply->abort(); }
+    });
     connect(reply, &QNetworkReply::downloadProgress, this, [this](qint64 received, qint64 total) {
         const int progress = total > 0 ? static_cast<int>((received * 100) / total) : 0;
         if (m_updateProgress != progress) { m_updateProgress = progress; emit updateProgressChanged(); }
     });
-    connect(reply, &QNetworkReply::finished, this, [this, reply, file, apkPath]() {
-        file->write(reply->readAll()); file->flush(); file->close();
-        if (reply->error() != QNetworkReply::NoError) { setUpdateStatus("Download APK gagal"); emit operationMessage(reply->errorString(), true); file->remove(); file->deleteLater(); reply->deleteLater(); return; }
-        QFile verify(apkPath); const bool opened = verify.open(QIODevice::ReadOnly);
-        const QByteArray digest = opened ? QCryptographicHash::hash(verify.readAll(), QCryptographicHash::Sha256).toHex() : QByteArray();
-        const QByteArray expected = m_updateSha256.trimmed().split(' ').value(0).toLower().toLatin1();
-        if (!opened || (!expected.isEmpty() && digest != expected)) {
-            setUpdateStatus("Checksum APK tidak cocok"); emit operationMessage("Update dibatalkan: SHA-256 APK tidak cocok", true); file->remove(); file->deleteLater(); reply->deleteLater(); return;
+    connect(reply, &QNetworkReply::finished, this, [this, reply, file, hash, consume, apkPath]() {
+        const bool consumed = consume();
+        const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const QByteArray expected = m_updateSha256.toLatin1();
+        const QByteArray actual = hash->result().toHex();
+        const bool digestFormatValid = QRegularExpression("^[0-9a-fA-F]{64}$").match(QString::fromLatin1(expected)).hasMatch();
+        const bool responseValid = reply->error() == QNetworkReply::NoError && httpStatus == 200 && consumed && file->size() > 0;
+        const bool digestValid = digestFormatValid && actual.compare(expected, Qt::CaseInsensitive) == 0;
+        if (!responseValid || !digestValid || !file->commit()) {
+            QString reason;
+            if (reply->error() != QNetworkReply::NoError) reason = reply->errorString();
+            else if (httpStatus != 200) reason = QString("server membalas HTTP %1").arg(httpStatus);
+            else if (!consumed) reason = "ukuran APK melewati batas atau penulisan gagal";
+            else if (file->size() == 0) reason = "file APK kosong";
+            else reason = "SHA-256 tidak cocok atau format checksum salah";
+            file->cancelWriting(); m_updateDownloadInProgress = false; m_updateProgress = 0; emit updateProgressChanged();
+            setUpdateStatus("Update dibatalkan — verifikasi gagal"); emit operationMessage("APK tidak dipasang: " + reason, true);
+            file->deleteLater(); hash->deleteLater(); reply->deleteLater(); return;
         }
-        setUpdateStatus("APK siap dipasang; konfirmasi installer Android"); installDownloadedApk(apkPath);
-        file->deleteLater(); reply->deleteLater();
+        m_updateDownloadInProgress = false; m_updateProgress = 100; emit updateProgressChanged();
+        setUpdateStatus("APK terverifikasi SHA-256; Android akan meminta konfirmasi pemasangan");
+        installDownloadedApk(apkPath);
+        file->deleteLater(); hash->deleteLater(); reply->deleteLater();
     });
 #endif
 }

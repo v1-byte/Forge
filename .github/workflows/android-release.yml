@@ -9,12 +9,24 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: android-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Validate release tag and app version
+        working-directory: forge-workbench/native-qt6
+        run: |
+          test "$GITHUB_REF_TYPE" = tag || { echo "Releases must be built from a version tag, not a branch."; exit 1; }
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PROJECT_VERSION="$(sed -n 's/^project(ForgeWorkbench VERSION \([^ ]*\).*/\1/p' CMakeLists.txt)"
+          test "$TAG_VERSION" = "$PROJECT_VERSION" || { echo "Tag v$TAG_VERSION does not match CMake version $PROJECT_VERSION"; exit 1; }
 
       - name: Install Qt for Android
         uses: jurplel/install-qt-action@v4
@@ -45,21 +57,55 @@ jobs:
             if [ "${platform##*/}" != "android-34" ]; then rm -rf "$platform"; fi
           done
 
+      - name: Prepare Android release signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64" || { echo "Missing ANDROID_KEYSTORE_BASE64; refusing to publish a debug-signed APK."; exit 1; }
+          test -n "$ANDROID_KEYSTORE_PASSWORD" && test -n "$ANDROID_KEY_ALIAS" && test -n "$ANDROID_KEY_PASSWORD" || { echo "One or more Android signing secrets are missing."; exit 1; }
+          KEYSTORE="$RUNNER_TEMP/forge-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
+          test -s "$KEYSTORE"
+          echo "QT_ANDROID_KEYSTORE_PATH=$KEYSTORE" >> "$GITHUB_ENV"
+          echo "QT_ANDROID_KEYSTORE_ALIAS=$ANDROID_KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "QT_ANDROID_KEYSTORE_STORE_PASS=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "QT_ANDROID_KEYSTORE_KEY_PASS=$ANDROID_KEY_PASSWORD" >> "$GITHUB_ENV"
+
       - name: Configure Android build
         working-directory: forge-workbench/native-qt6
         run: |
-          qt-cmake -S . -B build -DQT_ANDROID_ABIS=arm64-v8a
+          qt-cmake -S . -B build -DQT_ANDROID_ABIS=arm64-v8a -DQT_ANDROID_SIGN_APK=ON
 
       - name: Build APK
         working-directory: forge-workbench/native-qt6
         run: cmake --build build --parallel 2
 
+      - name: Verify APK release signature
+        working-directory: forge-workbench/native-qt6
+        run: |
+          APK=$(find build -type f -name '*.apk' -print -quit)
+          test -n "$APK"
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          APKSIGNER="$SDK_ROOT/build-tools/34.0.0/apksigner"
+          test -x "$APKSIGNER"
+          SIGNATURE="$($APKSIGNER verify --verbose --print-certs "$APK")"
+          printf '%s\n' "$SIGNATURE"
+          if printf '%s' "$SIGNATURE" | grep -qi 'CN=Android Debug'; then
+            echo "Refusing to publish an APK signed with the Android debug certificate."
+            exit 1
+          fi
+          rm -f "$QT_ANDROID_KEYSTORE_PATH"
+
       - name: Locate and checksum APK
         id: artifact
         working-directory: forge-workbench/native-qt6
         run: |
-          APK=$(find build -type f -name '*.apk' | head -n 1)
-          test -n "$APK"
+          mapfile -t APKS < <(find build -type f -name '*.apk' -print)
+          test "${#APKS[@]}" -eq 1 || { echo "Expected exactly one APK; found ${#APKS[@]}"; exit 1; }
+          APK="${APKS[0]}"
           cp "$APK" ForgeWorkbench-${GITHUB_REF_NAME#v}.apk
           sha256sum ForgeWorkbench-${GITHUB_REF_NAME#v}.apk | tee ForgeWorkbench-${GITHUB_REF_NAME#v}.apk.sha256
           echo "apk=ForgeWorkbench-${GITHUB_REF_NAME#v}.apk" >> "$GITHUB_OUTPUT"
@@ -68,7 +114,8 @@ jobs:
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          generate_release_notes: false
+          body_path: RELEASE_NOTES_v2.1.3_ID.md
           files: |
             forge-workbench/native-qt6/ForgeWorkbench-*.apk
             forge-workbench/native-qt6/ForgeWorkbench-*.apk.sha256
