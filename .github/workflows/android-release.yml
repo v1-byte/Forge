@@ -31,6 +31,20 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Install and pin Android SDK 34
+        run: |
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager)"; fi
+          set +o pipefail
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" --licenses >/dev/null
+          yes | "$SDKMANAGER" --sdk_root="$SDK_ROOT" "platforms;android-34" "build-tools;34.0.0" >/dev/null
+          set -o pipefail
+          for platform in "$SDK_ROOT"/platforms/android-*; do
+            [ -d "$platform" ] || continue
+            if [ "${platform##*/}" != "android-34" ]; then rm -rf "$platform"; fi
+          done
+
       - name: Configure Android build
         working-directory: forge-workbench/native-qt6
         run: |
