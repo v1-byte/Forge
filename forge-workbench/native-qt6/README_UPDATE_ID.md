@@ -27,10 +27,11 @@ Jangan commit keystore atau password. Kehilangan kunci/sertifikat berbeda akan m
 
 ## Prosedur rilis
 
-1. Naikkan `project(... VERSION ...)` di `CMakeLists.txt`, misalnya `2.1.6`. Versi runtime aplikasi diambil dari definisi compile-time CMake.
-2. Siapkan catatan rilis yang hanya menjanjikan fitur yang sudah diuji dan memuat known issues.
-3. Buat/push tag (misalnya `v2.1.6`) yang cocok persis dengan versi CMake. Workflow memeriksa tag, membangun arm64-v8a, menandatangani APK, memverifikasi signature dan package/version APK, lalu menerbitkan APK dan checksum.
-4. Periksa log workflow, fingerprint sertifikat, checksum, dan install/update di perangkat uji sebelum mengumumkan rilis. Status workflow berhasil bukan bukti bahwa semua fitur lolos uji perangkat.
+1. Naikkan `project(... VERSION ...)` di `CMakeLists.txt` dan samakan dengan `package.json`. Versi runtime aplikasi diambil dari definisi compile-time CMake.
+2. Pertahankan `android:versionCode="-- %%INSERT_VERSION_CODE --"` dan `android:versionName="-- %%INSERT_VERSION_NAME --"` pada `android/AndroidManifest.xml`; Qt mengisi kedua nilai dari properti CMake `QT_ANDROID_VERSION_CODE` dan `QT_ANDROID_VERSION_NAME`.
+3. Siapkan catatan rilis yang hanya menjanjikan fitur yang sudah diuji dan memuat known issues.
+4. Buat/push tag (misalnya `v2.1.7`) yang cocok persis dengan versi CMake. Workflow memeriksa tag, membangun arm64-v8a, menandatangani APK, memverifikasi signature dan package/version APK, lalu menerbitkan APK dan checksum.
+5. Periksa log workflow, fingerprint sertifikat, checksum, dan install/update di perangkat uji sebelum mengumumkan rilis. Status workflow berhasil bukan bukti bahwa semua fitur lolos uji perangkat.
 
 Workflow `workflow_dispatch` pada branch sengaja ditolak; jalankan pada tag. Perlakukan tag dan release yang sudah diumumkan sebagai immutable.
 
